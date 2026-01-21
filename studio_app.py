@@ -70,6 +70,27 @@ def get_telegram_link(tg_str):
     tg = tg.replace("https://", "").replace("http://", "").replace("@", "").replace("t.me/", "")
     return f"https://t.me/{tg}"
 
+def make_clickable_phone(phone):
+    """Создаёт кликабельную ссылку для телефона"""
+    if not phone or pd.isna(phone):
+        return ""
+    digits = ''.join(filter(str.isdigit, str(phone)))
+    return f'<a href="tel:+{digits}">{phone}</a>'
+
+def make_clickable_vk(vk):
+    """Создаёт кликабельную ссылку для VK"""
+    if not vk or pd.isna(vk):
+        return ""
+    url = vk if vk.startswith("http") else f"https://{vk}"
+    return f'<a href="{url}" target="_blank">{vk}</a>'
+
+def make_clickable_tg(tg):
+    """Создаёт кликабельную ссылку для Telegram"""
+    if not tg or pd.isna(tg):
+        return ""
+    url = tg if tg.startswith("http") else f"https://{tg}"
+    return f'<a href="{url}" target="_blank">{tg}</a>'
+
 def format_date_display(date_str):
     """Форматирование даты в dd.mm.yyyy"""
     if pd.isna(date_str) or date_str is None or date_str == '':
