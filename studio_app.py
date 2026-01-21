@@ -324,52 +324,65 @@ if choice == "Клиенты и Группы":
     
     if not clients_df_data.empty:
         st.info(f"Найдено клиентов: {len(clients_df_data)}")
-        
-        # ✅ ИСПРАВЛЁННЫЙ КОД ДЛЯ ТАБЛИЦЫ С КЛИКАБЕЛЬНЫМИ ССЫЛКАМИ
-        display_df = clients_df_data.copy()
-        display_df['first_order_date'] = display_df['first_order_date'].apply(format_date_display)
-
-        # Формируем отображаемые значения и рабочие ссылки
-        display_df['phone_display'] = display_df['phone'].apply(format_phone)
-        display_df['vk_display'] = display_df['vk_id'].apply(format_vk)
-        display_df['tg_display'] = display_df['tg_id'].apply(format_telegram)
-
-        display_df['phone_link'] = display_df['phone'].apply(get_phone_link)
-        display_df['vk_link'] = display_df['vk_id'].apply(get_vk_link)
-        display_df['tg_link'] = display_df['tg_id'].apply(get_telegram_link)
-
-        # Выводим готовую таблицу
-        st.dataframe(
-            display_df[['id', 'name', 'sex', 'phone_link', 'phone_display', 'vk_link', 'vk_display', 'tg_link', 'tg_display', 'group_name', 'first_order_date']],
-            column_config={
-                "id": "ID",
-                "name": "Имя",
-                "sex": "Пол",
-                "group_name": "Группа",
-                "first_order_date": "Первая оплата",
-        
-                # ✅ Исправленные кликабельные ссылки
-                "phone_link": st.column_config.LinkColumn(
-                    "Телефон",
-                    display_text="phone_display"  # Теперь передаём только название колонки
-                ),
-                "vk_link": st.column_config.LinkColumn(
-                    "VK",
-                    display_text="vk_display"
-                ),
-                "tg_link": st.column_config.LinkColumn(
-                    "Telegram",
-                    display_text="tg_display"
-                ),
-        
-                # Скрываем вспомогательные колонки, чтобы они не отображались в таблице
-                "phone_display": None,
-                "vk_display": None,
-                "tg_display": None
-            },
-            use_container_width=True,
-            hide_index=True
-	)
+    
+            # Создаём копию для отображения с форматированием
+            display_df = clients_df_data.copy()
+    
+            # Форматируем все поля
+            display_df['first_order_date'] = display_df['first_order_date'].apply(format_date_display)
+    
+            # Форматируем контакты для отображения и готовим ссылки
+            display_df['phone_display'] = display_df['phone'].apply(format_phone)
+            display_df['phone_url'] = display_df['phone'].apply(get_phone_url)
+    
+            display_df['vk_display'] = display_df['vk_id'].apply(format_vk)
+            display_df['vk_url'] = display_df['vk_id'].apply(lambda x: f"https://{format_vk(x)}" if format_vk(x) else "")
+    
+            display_df['tg_display'] = display_df['tg_id'].apply(format_telegram)
+            display_df['tg_url'] = display_df['tg_id'].apply(lambda x: f"https://{format_telegram(x)}" if format_telegram(x) else "")
+    
+            # Переименовываем колонки для отображения
+            display_df.columns = ['ID', 'Имя', 'Пол', 'Телефон', 'VK', 'Telegram', 'Группа', 'Первая оплата', 
+                         'phone_display', 'phone_url', 'vk_display', 'vk_url', 'tg_display', 'tg_url']
+    
+            # Отображаем форматированную таблицу с кликабельными ссылками
+            st.dataframe(
+                display_df[['ID', 'Имя', 'Пол', 'phone_display', 'phone_url', 'vk_display', 'vk_url', 'tg_display', 'tg_url', 'Группа', 'Первая оплата']],
+                column_config={
+                    "ID": st.column_config.NumberColumn("ID", disabled=True),
+                    "Имя": st.column_config.TextColumn("Имя"),
+                    "Пол": st.column_config.TextColumn("Пол"),
+            
+                    # 📞 Телефон: кликабельная ссылка для звонка, отображается в формате +7 XXX XXX-XX-XX
+                    "phone_display": st.column_config.LinkColumn(
+                        "Телефон",
+                        display_text=":parent",
+                        url="phone_url"
+                    ),
+                    "phone_url": None,  # Скрываем техническую колонку с ссылкой
+            
+                    # 📘 VK: кликабельная ссылка, отображается как vk.com/idXXXX или vk.com/username
+                    "vk_display": st.column_config.LinkColumn(
+                        "VK",
+                        display_text=":parent",
+                        url="vk_url"
+                    ),
+                    "vk_url": None,  # Скрываем техническую колонку с ссылкой
+            
+                    # 💬 Telegram: кликабельная ссылка, отображается как t.me/username
+                    "tg_display": st.column_config.LinkColumn(
+                        "Telegram",
+                        display_text=":parent",
+                        url="tg_url"
+                    ),
+                    "tg_url": None,  # Скрываем техническую колонку с ссылкой
+            
+                    "Группа": st.column_config.TextColumn("Группа"),
+                    "Первая оплата": st.column_config.TextColumn("Первая оплата")
+                },
+                use_container_width=True,
+                hide_index=True
+    )
 
         # --- ВЫБОР КЛИЕНТА ДЛЯ РЕДАКТИРОВАНИЯ ---
         # Формируем список для выбора
