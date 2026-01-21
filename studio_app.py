@@ -8,7 +8,6 @@ import re
 STATUS_LIST = ["В работе", "Ожидает оплаты", "Выполнен", "Оплачен"]
 
 # --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
-
 def format_phone(phone_str):
     """Форматирование телефона в +7 000 000-00-00"""
     if not phone_str or pd.isna(phone_str):
@@ -103,7 +102,7 @@ def update_client_first_order_date(client_id):
         JOIN orders o ON oi.order_id = o.id
         WHERE o.client_id = ? AND oi.payment_date IS NOT NULL
     ''', (client_id,), fetch=True)
-    
+
     if not result.empty and result['first_payment'].iloc[0]:
         run_query(
             "UPDATE clients SET first_order_date = ? WHERE id = ?",
@@ -111,14 +110,15 @@ def update_client_first_order_date(client_id):
         )
 
 def init_db():
+    """Инициализация базы данных"""
     conn = sqlite3.connect('studio.db')
     c = conn.cursor()
     c.execute("PRAGMA foreign_keys = ON;")
-    
+
     c.execute('''CREATE TABLE IF NOT EXISTS groups (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT UNIQUE)''')
-    
+
     c.execute('''CREATE TABLE IF NOT EXISTS clients (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT,
@@ -129,13 +129,13 @@ def init_db():
                     group_id INTEGER,
                     first_order_date DATE,
                     FOREIGN KEY (group_id) REFERENCES groups(id))''')
-    
+
     c.execute('''CREATE TABLE IF NOT EXISTS services_catalog (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT,
                     min_price REAL,
                     description TEXT)''')
-    
+
     c.execute('''CREATE TABLE IF NOT EXISTS orders (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     client_id INTEGER,
@@ -143,7 +143,7 @@ def init_db():
                     status TEXT,
                     total_amount REAL DEFAULT 0,
                     FOREIGN KEY (client_id) REFERENCES clients(id))''')
-    
+
     c.execute('''CREATE TABLE IF NOT EXISTS order_items (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     order_id INTEGER,
@@ -152,11 +152,12 @@ def init_db():
                     amount REAL,
                     hours REAL,
                     FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE)''')
-    
+
     conn.commit()
     conn.close()
 
 def run_query(query, params=(), fetch=False):
+    """Выполняет SQL запрос"""
     conn = sqlite3.connect('studio.db')
     c = conn.cursor()
     try:
@@ -186,12 +187,12 @@ choice = st.sidebar.selectbox("Навигация", menu)
 # --- 1. КЛИЕНТЫ И ГРУППЫ ---
 if choice == "Клиенты и Группы":
     st.subheader("Клиенты")
-    
+
     # Получаем группы
     groups_df = run_query("SELECT id, name FROM groups", fetch=True)
     groups_list = groups_df['name'].tolist() if not groups_df.empty else []
     group_map = dict(zip(groups_df['name'], groups_df['id'])) if not groups_df.empty else {}
-    
+
     # Форма добавления клиента
     with st.expander("➕ Добавить нового клиента"):
         with st.form("add_client"):
@@ -311,9 +312,9 @@ if choice == "Клиенты и Группы":
     LEFT JOIN groups g ON c.group_id = g.id
     WHERE 1=1
     '''
-    
+
     params = []
-    
+
     if search_query:
         clients_query += ''' AND (LOWER(c.name) LIKE LOWER(?) OR 
                                   c.phone LIKE ? OR 
@@ -321,14 +322,14 @@ if choice == "Клиенты и Группы":
                                   LOWER(c.tg_id) LIKE LOWER(?))'''
         search_pattern = f'%{search_query}%'
         params.extend([search_pattern] * 4)
-    
+
     if filter_group != "Все":
         clients_query += ' AND g.name = ?'
         params.append(filter_group)
-    
+
     clients_query += ' ORDER BY c.id DESC'
     clients_df_data = run_query(clients_query, tuple(params), fetch=True)
-    
+
     if not clients_df_data.empty:
         st.info(f"Найдено клиентов: {len(clients_df_data)}")
         
@@ -347,76 +348,71 @@ if choice == "Клиенты и Группы":
         
         st.markdown("---")
         
-        # Редактирование через data_editor (используем сырые данные)
-        st.markdown("### ✏️ Редактирование клиентов")
-        st.info("Дважды кликните по ячейке для редактирования. Изменения сохранятся автоматически.")
+        # Редактирование клиентов с выбором строки
+        st.markdown("### ✏️ Редактирование клиента")
         
-        # Подготовка данных для data_editor (используем сырые данные)
-        editor_df = clients_df_data.copy()
-        editor_df['first_order_date'] = editor_df['first_order_date'].apply(format_date_display)
+        # Создаём список для выбора
+        client_options = [f"#{row['id']} {row['name']}" for _, row in clients_df_data.iterrows()]
+        selected_client = st.selectbox("Выберите клиента для редактирования", client_options, key="client_select")
         
-        # Добавляем колонку для отображения (форматированная)
-        editor_df['phone_display'] = editor_df['phone'].apply(format_phone)
-        editor_df['vk_display'] = editor_df['vk_id'].apply(format_vk)
-        editor_df['tg_display'] = editor_df['tg_id'].apply(format_telegram)
-        
-        # Редактируем только сырые колонки
-        edited_clients = st.data_editor(
-            editor_df[['id', 'name', 'sex', 'phone', 'vk_id', 'tg_id', 'group_name', 'first_order_date', 
-                       'phone_display', 'vk_display', 'tg_display']],
-            column_config={
-                "id": st.column_config.NumberColumn("ID", disabled=True),
-                "name": st.column_config.TextColumn("Имя"),
-                "sex": st.column_config.SelectboxColumn("Пол", options=["М", "Ж"]),
-                "phone": st.column_config.TextColumn("Телефон (для редактирования)"),
-                "vk_id": st.column_config.TextColumn("VK ID (для редактирования)"),
-                "tg_id": st.column_config.TextColumn("Telegram (для редактирования)"),
-                "group_name": st.column_config.SelectboxColumn("Группа", options=["Без группы"] + groups_list),
-                "first_order_date": st.column_config.TextColumn("Первая оплата"),
-                "phone_display": st.column_config.TextColumn("Телефон", disabled=True),
-                "vk_display": st.column_config.TextColumn("VK", disabled=True),
-                "tg_display": st.column_config.TextColumn("Telegram", disabled=True),
-            },
-            hide_index=True,
-            use_container_width=True,
-            key="clients_editor"
-        )
-
-        # Сохранение изменений
-        if not edited_clients.equals(editor_df):
-            for idx in range(len(edited_clients)):
-                orig_row = editor_df.iloc[idx]
-                new_row = edited_clients.iloc[idx]
+        if selected_client:
+            # Получаем ID выбранного клиента
+            selected_id = int(selected_client.split()[0][1:])
+            selected_row = clients_df_data[clients_df_data['id'] == selected_id].iloc[0]
+            
+            # Создаём таблицу с одной строкой
+            edit_df = pd.DataFrame([selected_row])
+            edit_df['first_order_date'] = edit_df['first_order_date'].apply(format_date_display)
+            
+            st.info(f"Редактирование: #{selected_id} {selected_row['name']}")
+            
+            edited_client = st.data_editor(
+                edit_df[['id', 'name', 'sex', 'phone', 'vk_id', 'tg_id', 'group_name', 'first_order_date']],
+                column_config={
+                    "id": st.column_config.NumberColumn("ID", disabled=True),
+                    "name": st.column_config.TextColumn("Имя"),
+                    "sex": st.column_config.SelectboxColumn("Пол", options=["М", "Ж"]),
+                    "phone": st.column_config.TextColumn("Телефон"),
+                    "vk_id": st.column_config.TextColumn("VK ID"),
+                    "tg_id": st.column_config.TextColumn("Telegram"),
+                    "group_name": st.column_config.SelectboxColumn("Группа", options=["Без группы"] + groups_list),
+                    "first_order_date": st.column_config.TextColumn("Первая оплата"),
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="single_client_editor"
+            )
+            
+            # Проверяем изменения
+            if not edited_client.equals(edit_df):
+                new_row = edited_client.iloc[0]
+                group_name = new_row['group_name']
+                g_id = group_map.get(group_name) if group_name != "Без группы" else None
+                first_order = parse_date_to_db(new_row['first_order_date'])
                 
-                if not orig_row.equals(new_row):
-                    client_id = int(new_row['id'])
-                    group_name = new_row['group_name']
-                    g_id = group_map.get(group_name) if group_name != "Без группы" else None
-                    first_order = parse_date_to_db(new_row['first_order_date'])
-                    
-                    run_query('''
-                        UPDATE clients 
-                        SET name=?, sex=?, phone=?, vk_id=?, tg_id=?, group_id=?, first_order_date=?
-                        WHERE id=?
-                    ''', (
-                        new_row['name'],
-                        new_row['sex'],
-                        new_row['phone'],
-                        new_row['vk_id'],
-                        new_row['tg_id'],
-                        g_id,
-                        first_order,
-                        client_id
-                    ))
-            st.success("✅ Изменения сохранены!")
-            st.rerun()
+                run_query('''
+                    UPDATE clients 
+                    SET name=?, sex=?, phone=?, vk_id=?, tg_id=?, group_id=?, first_order_date=?
+                    WHERE id=?
+                ''', (
+                    new_row['name'],
+                    new_row['sex'],
+                    new_row['phone'],
+                    new_row['vk_id'],
+                    new_row['tg_id'],
+                    g_id,
+                    first_order,
+                    selected_id
+                ))
+                st.success("✅ Изменения сохранены!")
+                st.rerun()
     else:
         st.info("Клиенты не найдены")
 
 # --- 2. ПРАЙС-ЛИСТ ---
 elif choice == "Прайс-лист Услуг":
     st.subheader("Справочник Услуг")
-    
+
     with st.expander("➕ Добавить новую услугу"):
         with st.form("add_service"):
             s_name = st.text_input("Наименование услуги")
@@ -430,9 +426,9 @@ elif choice == "Прайс-лист Услуг":
                               (s_name, s_price, s_desc))
                     st.success("Услуга добавлена")
                     st.rerun()
-    
+
     services_df = run_query("SELECT * FROM services_catalog", fetch=True)
-    
+
     if not services_df.empty:
         # Форматируем цену для отображения
         display_services = services_df.copy()
@@ -443,49 +439,59 @@ elif choice == "Прайс-лист Услуг":
         
         st.dataframe(display_services, use_container_width=True, hide_index=True)
         
-        # Редактирование через data_editor
-        st.markdown("### ✏️ Редактирование услуг")
-        st.info("Дважды кликните по ячейке для редактирования. Изменения сохранятся автоматически.")
+        st.markdown("---")
         
-        # Для data_editor используем сырые данные
-        edited_services = st.data_editor(
-            services_df,
-            column_config={
-                "id": st.column_config.NumberColumn("ID", disabled=True),
-                "name": st.column_config.TextColumn("Услуга"),
-                "min_price": st.column_config.NumberColumn("Мин. прайс ₽", format="%.0f"),
-                "description": st.column_config.TextColumn("Описание")
-            },
-            hide_index=True,
-            use_container_width=True,
-            key="services_editor"
-        )
+        # Редактирование услуг с выбором строки
+        st.markdown("### ✏️ Редактирование услуги")
         
-        if not edited_services.equals(services_df):
-            for idx in range(len(edited_services)):
-                orig_row = services_df.iloc[idx]
-                new_row = edited_services.iloc[idx]
-                
-                if not orig_row.equals(new_row):
-                    run_query('''
-                        UPDATE services_catalog 
-                        SET name=?, min_price=?, description=?
-                        WHERE id=?
-                    ''', (
-                        new_row['name'],
-                        new_row['min_price'],
-                        new_row['description'],
-                        int(new_row['id'])
-                    ))
-            st.success("✅ Изменения сохранены!")
-            st.rerun()
+        # Создаём список для выбора
+        service_options = [f"#{row['id']} {row['name']}" for _, row in services_df.iterrows()]
+        selected_service = st.selectbox("Выберите услугу для редактирования", service_options, key="service_select")
+        
+        if selected_service:
+            # Получаем ID выбранной услуги
+            selected_id = int(selected_service.split()[0][1:])
+            selected_row = services_df[services_df['id'] == selected_id].iloc[0]
+            
+            # Создаём таблицу с одной строкой
+            edit_df = pd.DataFrame([selected_row])
+            
+            st.info(f"Редактирование: #{selected_id} {selected_row['name']}")
+            
+            edited_service = st.data_editor(
+                edit_df,
+                column_config={
+                    "id": st.column_config.NumberColumn("ID", disabled=True),
+                    "name": st.column_config.TextColumn("Услуга"),
+                    "min_price": st.column_config.NumberColumn("Мин. прайс ₽", format="%.0f"),
+                    "description": st.column_config.TextColumn("Описание")
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="single_service_editor"
+            )
+            
+            if not edited_service.equals(edit_df):
+                new_row = edited_service.iloc[0]
+                run_query('''
+                    UPDATE services_catalog 
+                    SET name=?, min_price=?, description=?
+                    WHERE id=?
+                ''', (
+                    new_row['name'],
+                    new_row['min_price'],
+                    new_row['description'],
+                    selected_id
+                ))
+                st.success("✅ Изменения сохранены!")
+                st.rerun()
     else:
         st.info("Услуги еще не добавлены")
 
 # --- 3. ЗАКАЗЫ ---
 elif choice == "Заказы":
     st.subheader("Управление Заказами")
-    
+
     clients_df = run_query("SELECT id, name FROM clients", fetch=True)
     client_names = clients_df['name'].tolist() if not clients_df.empty else []
     client_map = dict(zip(clients_df['name'], clients_df['id'])) if not clients_df.empty else {}
@@ -534,11 +540,11 @@ elif choice == "Заказы":
     if order_search:
         orders_query += " AND LOWER(c.name) LIKE LOWER(?)"
         params.append(f"%{order_search}%")
-    
+
     if status_filter != "Все":
         orders_query += " AND o.status = ?"
         params.append(status_filter)
-    
+
     if date_filter == "Текущий месяц":
         current_month = date.today().replace(day=1).strftime("%Y-%m-%d")
         orders_query += " AND o.execution_date >= ?"
@@ -550,7 +556,7 @@ elif choice == "Заказы":
 
     orders_query += " ORDER BY o.id DESC"
     orders_df = run_query(orders_query, tuple(params), fetch=True)
-    
+
     if not orders_df.empty:
         orders_df['client_name'] = orders_df['client_id'].map(client_map_reverse)
         
@@ -585,74 +591,77 @@ elif choice == "Заказы":
         
         st.dataframe(display_orders, use_container_width=True, hide_index=True)
         
-        # Редактирование через data_editor
-        st.markdown("### ✏️ Редактирование заказов")
-        st.info("Дважды кликните по ячейке для редактирования. Изменения сохранятся автоматически.")
+        st.markdown("---")
         
-        # Подготовка данных для data_editor
-        editor_df = orders_df[['id', 'client_id', 'client_name', 'execution_date', 'status', 'total_amount']].copy()
-        editor_df['execution_date'] = editor_df['execution_date'].apply(format_date_display)
+        # Редактирование заказов с выбором строки
+        st.markdown("### ✏️ Редактирование заказа")
         
-        # Добавляем колонку для отображения
-        editor_df['total_display'] = editor_df['total_amount'].apply(lambda x: f"{format_currency(x)} ₽")
+        # Создаём список для выбора
+        order_options = [f"#{row['id']} {row['client_name']}" for _, row in orders_df.iterrows()]
+        selected_order = st.selectbox("Выберите заказ для редактирования", order_options, key="order_select")
         
-        edited_orders = st.data_editor(
-            editor_df,
-            column_config={
-                "id": st.column_config.NumberColumn("ID", disabled=True),
-                "client_name": st.column_config.SelectboxColumn(
-                    "Клиент",
-                    options=client_names,
-                    required=True
-                ),
-                "execution_date": st.column_config.TextColumn("Дата исполнения"),
-                "status": st.column_config.SelectboxColumn(
-                    "Статус",
-                    options=STATUS_LIST,
-                    required=True
-                ),
-                "total_amount": st.column_config.TextColumn("Сумма", disabled=True),
-                "total_display": st.column_config.TextColumn("Сумма", disabled=True)
-            },
-            hide_index=True,
-            use_container_width=True,
-            key="orders_editor"
-        )
-
-        # Сохранение изменений
-        if not edited_orders.equals(editor_df):
-            for idx in range(len(edited_orders)):
-                orig_row = editor_df.iloc[idx]
-                new_row = edited_orders.iloc[idx]
-                
-                if not orig_row.equals(new_row):
-                    order_id = int(new_row['id'])
-                    client_id = client_map.get(new_row['client_name'])
-                    exec_date = parse_date_to_db(new_row['execution_date'])
-                    
-                    run_query('''
-                        UPDATE orders 
-                        SET client_id=?, execution_date=?, status=?
-                        WHERE id=?
-                    ''', (client_id, exec_date, new_row['status'], order_id))
+        if selected_order:
+            # Получаем ID выбранного заказа
+            selected_id = int(selected_order.split()[0][1:])
+            selected_row = orders_df[orders_df['id'] == selected_id].iloc[0]
             
-            st.success("✅ Изменения сохранены!")
-            st.rerun()
+            # Создаём таблицу с одной строкой
+            edit_df = orders_df[orders_df['id'] == selected_id][['id', 'client_id', 'client_name', 'execution_date', 'status', 'total_amount']].copy()
+            edit_df['execution_date'] = edit_df['execution_date'].apply(format_date_display)
+            
+            st.info(f"Редактирование: Заказ #{selected_id} {selected_row['client_name']}")
+            
+            edited_order = st.data_editor(
+                edit_df,
+                column_config={
+                    "id": st.column_config.NumberColumn("ID", disabled=True),
+                    "client_id": st.column_config.NumberColumn("ID клиента", disabled=True),
+                    "client_name": st.column_config.SelectboxColumn(
+                        "Клиент",
+                        options=client_names,
+                        required=True
+                    ),
+                    "execution_date": st.column_config.TextColumn("Дата исполнения"),
+                    "status": st.column_config.SelectboxColumn(
+                        "Статус",
+                        options=STATUS_LIST,
+                        required=True
+                    ),
+                    "total_amount": st.column_config.NumberColumn("Сумма", disabled=True)
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="single_order_editor"
+            )
+
+            if not edited_order.equals(edit_df):
+                new_row = edited_order.iloc[0]
+                client_id = client_map.get(new_row['client_name'])
+                exec_date = parse_date_to_db(new_row['execution_date'])
+                
+                run_query('''
+                    UPDATE orders 
+                    SET client_id=?, execution_date=?, status=?
+                    WHERE id=?
+                ''', (client_id, exec_date, new_row['status'], selected_id))
+                
+                st.success("✅ Изменения сохранены!")
+                st.rerun()
     else:
         st.info("Заказы не найдены")
 
 # --- 4. ДЕТАЛИЗАЦИЯ ЗАКАЗА ---
 elif choice == "Детализация Заказа":
     st.subheader("Внутренние услуги заказа")
-    
+
     orders_df = run_query(
         "SELECT o.id, c.name, o.execution_date FROM orders o JOIN clients c ON o.client_id = c.id ORDER BY o.id DESC", 
         fetch=True
     )
-    
+
     if not orders_df.empty:
         orders_df['label'] = orders_df.apply(
-            lambda x: f"Заказ #{x['id']} - {x['name']} ({format_date_display(x['execution_date'])})", 
+            lambda x: f"#{x['id']} {x['name']} ({format_date_display(x['execution_date'])})", 
             axis=1
         )
         order_selection = st.selectbox("Выберите заказ", orders_df['label'])
@@ -734,69 +743,74 @@ elif choice == "Детализация Заказа":
                 total_amount = items_df['amount'].sum()
                 st.success(f"💰 **Итого:** {format_currency(total_amount)} ₽")
                 
-                # Редактирование через data_editor
                 st.markdown("---")
-                st.markdown("#### ✏️ Редактирование услуг")
-                st.info("Дважды кликните по ячейке для редактирования. Изменения сохранятся автоматически.")
+                st.markdown("#### ✏️ Редактирование услуги")
                 
-                # Для data_editor используем сырые данные
-                edited_items = st.data_editor(
-                    items_df,
-                    column_config={
-                        "id": st.column_config.NumberColumn("ID", disabled=True),
-                        "service_name": st.column_config.SelectboxColumn(
-                            "Услуга",
-                            options=srv_list,
-                            required=True
-                        ),
-                        "payment_date": st.column_config.TextColumn("Дата оплаты"),
-                        "amount": st.column_config.NumberColumn("Сумма", format="%.0f"),
-                        "hours": st.column_config.NumberColumn("Часы", format="%.1f", step=0.1)
-                    },
-                    hide_index=True,
-                    use_container_width=True,
-                    key="items_editor"
-                )
-
-                # Сохранение изменений
-                if not edited_items.equals(items_df):
-                    for idx in range(len(edited_items)):
-                        orig_row = items_df.iloc[idx]
-                        new_row = edited_items.iloc[idx]
-                        
-                        if not orig_row.equals(new_row):
-                            item_id = int(new_row['id'])
-                            payment_date_val = parse_date_to_db(new_row['payment_date'])
-                            amount_val = float(new_row['amount'])
-                            hours_val = float(new_row['hours'])
-                            
-                            run_query('''
-                                UPDATE order_items 
-                                SET service_name=?, payment_date=?, amount=?, hours=?
-                                WHERE id=?
-                            ''', (
-                                new_row['service_name'],
-                                payment_date_val,
-                                amount_val,
-                                hours_val,
-                                item_id
-                            ))
+                # Создаём список для выбора
+                item_options = [f"#{row['id']} {row['service_name']} ({format_date_display(row['payment_date'])})" 
+                               for _, row in items_df.iterrows()]
+                selected_item = st.selectbox("Выберите услугу для редактирования", item_options, key="item_select")
+                
+                if selected_item:
+                    # Получаем ID выбранной услуги
+                    selected_id = int(selected_item.split()[0][1:])
                     
-                    # Обновляем сумму заказа
-                    total_res = run_query(
-                        "SELECT SUM(amount) as total FROM order_items WHERE order_id=?",
-                        (order_id,),
-                        fetch=True
+                    # Создаём таблицу с одной строкой
+                    edit_df = items_df[items_df['id'] == selected_id].copy()
+                    
+                    st.info(f"Редактирование: {selected_item}")
+                    
+                    edited_item = st.data_editor(
+                        edit_df,
+                        column_config={
+                            "id": st.column_config.NumberColumn("ID", disabled=True),
+                            "service_name": st.column_config.SelectboxColumn(
+                                "Услуга",
+                                options=srv_list,
+                                required=True
+                            ),
+                            "payment_date": st.column_config.TextColumn("Дата оплаты"),
+                            "amount": st.column_config.NumberColumn("Сумма", format="%.0f"),
+                            "hours": st.column_config.NumberColumn("Часы", format="%.1f", step=0.1)
+                        },
+                        hide_index=True,
+                        use_container_width=True,
+                        key="single_item_editor"
                     )
-                    total = total_res['total'].iloc[0] if not total_res.empty and total_res['total'].iloc[0] else 0.0
-                    run_query("UPDATE orders SET total_amount=? WHERE id=?", (total, order_id))
-                    
-                    # Обновляем first_order_date клиента
-                    if current_client_id:
-                        update_client_first_order_date(current_client_id)
-                    
-                    st.success("✅ Изменения сохранены!")
-                    st.rerun()
+
+                    if not edited_item.equals(edit_df):
+                        new_row = edited_item.iloc[0]
+                        payment_date_val = parse_date_to_db(new_row['payment_date'])
+                        amount_val = float(new_row['amount'])
+                        hours_val = float(new_row['hours'])
+                        
+                        run_query('''
+                            UPDATE order_items 
+                            SET service_name=?, payment_date=?, amount=?, hours=?
+                            WHERE id=?
+                        ''', (
+                            new_row['service_name'],
+                            payment_date_val,
+                            amount_val,
+                            hours_val,
+                            selected_id
+                        ))
+                        
+                        # Обновляем сумму заказа
+                        total_res = run_query(
+                            "SELECT SUM(amount) as total FROM order_items WHERE order_id=?",
+                            (order_id,),
+                            fetch=True
+                        )
+                        total = total_res['total'].iloc[0] if not total_res.empty and total_res['total'].iloc[0] else 0.0
+                        run_query("UPDATE orders SET total_amount=? WHERE id=?", (total, order_id))
+                        
+                        # Обновляем first_order_date клиента
+                        if current_client_id:
+                            update_client_first_order_date(current_client_id)
+                        
+                        st.success("✅ Изменения сохранены!")
+                        st.rerun()
             else:
                 st.info("В этом заказе пока нет услуг")
     else:
@@ -805,7 +819,7 @@ elif choice == "Детализация Заказа":
 # --- 5. ОТЧЁТЫ ---
 elif choice == "ОТЧЁТЫ":
     st.header("📊 Аналитические Отчёты")
-    
+
     # Основной запрос — по дате оплаты!
     main_query = '''
     SELECT 
@@ -828,7 +842,7 @@ elif choice == "ОТЧЁТЫ":
     WHERE oi.payment_date IS NOT NULL
     '''
     df = run_query(main_query, fetch=True)
-    
+
     if not df.empty:
         df['payment_date'] = pd.to_datetime(df['payment_date'])
         df['year'] = df['payment_date'].dt.year
