@@ -427,17 +427,17 @@ if choice == "Клиенты и Группы":
         
                 # ✅ Исправленные кликабельные ссылки
                 "phone_link": st.column_config.LinkColumn(
-                    "Телефон",
-                    display_text=display_df['phone_display']  # Передаём значения напрямую
-                ),
+                                 "Телефон",
+                                 display_text=display_df['phone_display']  # Передаём значения напрямую
+                                 ),
                 "vk_link": st.column_config.LinkColumn(
-                    "VK",
-                    display_text=display_df['vk_display']  # Передаём значения напрямую
-                ),
+                                 "VK",
+                                 display_text=display_df['vk_display']  # Передаём значения напрямую
+                                 ),
                 "tg_link": st.column_config.LinkColumn(
-                    "Telegram",
-                    display_text=display_df['tg_display']  # Передаём значения напрямую
-                ),
+                                 "Telegram",
+                                 display_text=display_df['tg_display']  # Передаём значения напрямую
+                                 ),
         
                 # Скрываем вспомогательные колонки, чтобы они не отображались в таблице
                 "phone_display": None,
