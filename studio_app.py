@@ -340,22 +340,22 @@ if choice == "Клиенты и Группы":
 
         # Выводим таблицу
         st.dataframe(
-            display_df[['id', 'name', 'sex', 'phone_link', 'vk_link', 'tg_link', 'group_name', 'first_order_date']],
+            display_df[['id', 'name', 'sex', 'phone', 'vk_id', 'tg_id', 'group_name', 'first_order_date']],
             column_config={
                 "id": "ID",
                 "name": "Имя",
                 "sex": "Пол",
                 "group_name": "Группа",
                 "first_order_date": "Первая оплата",
-                "phone_link": st.column_config.LinkColumn(
+                "phone": st.column_config.LinkColumn(
                     "Телефон",
                     display_text=display_df['phone_display']
                 ),
-                "vk_link": st.column_config.LinkColumn(
+                "vk_id": st.column_config.LinkColumn(
                     "VK",
                     display_text=display_df['vk_display']
                 ),
-                "tg_link": st.column_config.LinkColumn(
+                "tg_id": st.column_config.LinkColumn(
                     "Telegram",
                     display_text=display_df['tg_display']
                 ),
