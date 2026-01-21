@@ -28,10 +28,10 @@ def format_vk(vk_str):
         return ""
     vk = str(vk_str).strip()
     vk = vk.replace("https://", "").replace("http://", "")
-    if vk.startswith("vk.com/id"):
+    if vk.startswith("vk.com/"):
         return vk
     if vk.startswith("id") and vk[2:].isdigit():
-        return f"vk.com/id{vk}"
+        return f"vk.com/{vk}"
     if vk.isdigit():
         return f"vk.com/id{vk}"
     return f"vk.com/{vk}"
@@ -45,30 +45,6 @@ def format_telegram(tg_str):
     if tg.startswith("t.me/"):
         return tg
     return f"t.me/{tg}"
-
-def get_phone_link(phone_str):
-    """Генерация ссылки tel:"""
-    if not phone_str: return ""
-    digits = ''.join(filter(str.isdigit, str(phone_str)))
-    if len(digits) == 11:
-        return f"tel:{digits}"
-    if len(digits) == 10:
-        return f"tel:7{digits}"
-    return ""
-
-def get_vk_link(vk_str):
-    """Генерация полной ссылки VK"""
-    if not vk_str: return ""
-    vk = str(vk_str).strip()
-    vk = vk.replace("https://", "").replace("http://", "").replace("vk.com/id", "")
-    return f"https://vk.com/id{vk}"
-
-def get_telegram_link(tg_str):
-    """Генерация полной ссылки Telegram"""
-    if not tg_str: return ""
-    tg = str(tg_str).strip()
-    tg = tg.replace("https://", "").replace("http://", "").replace("@", "").replace("t.me/", "")
-    return f"https://t.me/{tg}"
 
 def format_date_display(date_str):
     """Форматирование даты в dd.mm.yyyy"""
@@ -217,14 +193,33 @@ if choice == "Клиенты и Группы":
     group_map = dict(zip(groups_df['name'], groups_df['id'])) if not groups_df.empty else {}
     
     # Форма добавления клиента
-    with st.expander("➕ Добавить нового клиента", expanded=False):
+    with st.expander("➕ Добавить нового клиента"):
         with st.form("add_client"):
             c_name = st.text_input("Имя *", placeholder="Иван Иванов")
             c_sex = st.selectbox("Пол", ["М", "Ж"])
-            c_phone_raw = st.text_input("Телефон", placeholder="Введите номер телефона")
-            c_vk_raw = st.text_input("VK ID", placeholder="id123456789 или username")
-            c_tg_raw = st.text_input("Telegram", placeholder="username (без @)")
             
+            # Телефон — вводим в любом формате, сохраняем как есть
+            c_phone_raw = st.text_input(
+                "Телефон", 
+                placeholder="Введите номер телефона",
+                help="Введите номер в любом формате, он будет автоматически отформатирован для отображения"
+            )
+            
+            # VK ID — вводим как есть
+            c_vk_raw = st.text_input(
+                "VK ID", 
+                placeholder="id123456789 или username",
+                help="Введите ID или username, ссылка сформируется автоматически"
+            )
+            
+            # Telegram — вводим как есть
+            c_tg_raw = st.text_input(
+                "Telegram", 
+                placeholder="username (без @)",
+                help="Введите username без @, ссылка сформируется автоматически"
+            )
+            
+            # Группа
             if groups_list:
                 c_group = st.selectbox("Группа", options=["Без группы"] + groups_list)
             else:
@@ -233,6 +228,7 @@ if choice == "Клиенты и Группы":
             
             if st.form_submit_button("Сохранить клиента"):
                 if c_name:
+                    # Сохраняем сырые данные (без форматирования)
                     phone = c_phone_raw if c_phone_raw else ""
                     vk = c_vk_raw if c_vk_raw else ""
                     tg = c_tg_raw if c_tg_raw else ""
@@ -264,7 +260,12 @@ if choice == "Клиенты и Группы":
                 for idx, row in groups_df.iterrows():
                     col_a, col_b, col_c = st.columns([3, 1, 1])
                     with col_a:
-                        new_name = st.text_input("Название", value=row['name'], key=f"group_name_{row['id']}", label_visibility="collapsed")
+                        new_name = st.text_input(
+                            "Название", 
+                            value=row['name'], 
+                            key=f"group_name_{row['id']}",
+                            label_visibility="collapsed"
+                        )
                     with col_b:
                         if st.button("💾", key=f"update_{row['id']}", help="Сохранить"):
                             if new_name and new_name != row['name']:
@@ -273,7 +274,11 @@ if choice == "Клиенты и Группы":
                                 st.rerun()
                     with col_c:
                         if st.button("🗑️", key=f"delete_{row['id']}", help="Удалить"):
-                            clients_check = run_query("SELECT COUNT(*) as count FROM clients WHERE group_id=?", (row['id'],), fetch=True)
+                            clients_check = run_query(
+                                "SELECT COUNT(*) as count FROM clients WHERE group_id=?", 
+                                (row['id'],), 
+                                fetch=True
+                            )
                             if not clients_check.empty and clients_check['count'].iloc[0] > 0:
                                 st.warning("Нельзя удалить группу с клиентами!")
                             else:
@@ -282,11 +287,12 @@ if choice == "Клиенты и Группы":
                                 st.rerun()
             else:
                 st.info("Групп пока нет")
-    
+
     # Поиск и фильтрация
+    st.markdown("### 🔍 Поиск и фильтрация")
     search_col1, search_col2 = st.columns([2, 1])
     with search_col1:
-        search_query = st.text_input("🔍 Поиск клиента", placeholder="Имя, телефон, VK, TG...")
+        search_query = st.text_input("Поиск по имени, телефону, VK или Telegram", placeholder="Введите текст...")
     with search_col2:
         filter_group = st.selectbox("Фильтр по группе", ["Все"] + groups_list)
 
@@ -305,6 +311,7 @@ if choice == "Клиенты и Группы":
     LEFT JOIN groups g ON c.group_id = g.id
     WHERE 1=1
     '''
+    
     params = []
     
     if search_query:
@@ -324,119 +331,73 @@ if choice == "Клиенты и Группы":
     
     if not clients_df_data.empty:
         st.info(f"Найдено клиентов: {len(clients_df_data)}")
-    
+        
         # Создаём копию для отображения с форматированием
         display_df = clients_df_data.copy()
-    
-        # Форматируем все поля
         display_df['first_order_date'] = display_df['first_order_date'].apply(format_date_display)
-    
-        # Форматируем контакты для отображения и готовим ссылки
-        display_df['phone_display'] = display_df['phone'].apply(format_phone)
-        display_df['phone_url'] = display_df['phone'].apply(get_phone_link)
-    
-        display_df['vk_display'] = display_df['vk_id'].apply(format_vk)
-        display_df['vk_url'] = display_df['vk_id'].apply(lambda x: f"https://{format_vk(x)}" if format_vk(x) else "")
-    
-        display_df['tg_display'] = display_df['tg_id'].apply(format_telegram)
-        display_df['tg_url'] = display_df['tg_id'].apply(lambda x: f"https://{format_telegram(x)}" if format_telegram(x) else "")
-    
+        display_df['phone'] = display_df['phone'].apply(format_phone)
+        display_df['vk_id'] = display_df['vk_id'].apply(format_vk)
+        display_df['tg_id'] = display_df['tg_id'].apply(format_telegram)
+        
         # Переименовываем колонки для отображения
-        display_df.columns = ['ID', 'Имя', 'Пол', 'Телефон', 'VK', 'Telegram', 'Группа', 'Первая оплата', 
-                         'phone_display', 'phone_url', 'vk_display', 'vk_url', 'tg_display', 'tg_url']
-    
-        # Отображаем форматированную таблицу с кликабельными ссылками
-        st.dataframe(
-                display_df[['ID', 'Имя', 'Пол', 'phone_display', 'phone_url', 'vk_display', 'vk_url', 'tg_display', 'tg_url', 'Группа', 'Первая оплата']],
-                column_config={
-                    "ID": st.column_config.NumberColumn("ID", disabled=True),
-                    "Имя": st.column_config.TextColumn("Имя"),
-                    "Пол": st.column_config.TextColumn("Пол"),
-            
-                    # 📞 Телефон: кликабельная ссылка для звонка, отображается в формате +7 XXX XXX-XX-XX
-                    "phone_display": st.column_config.LinkColumn(
-                        "Телефон",
-                        display_text=":parent",
-                        url="phone_url"
-                    ),
-                    "phone_url": None,  # Скрываем техническую колонку с ссылкой
-            
-                    # 📘 VK: кликабельная ссылка, отображается как vk.com/idXXXX или vk.com/username
-                    "vk_display": st.column_config.LinkColumn(
-                        "VK",
-                        display_text=":parent",
-                        url="vk_url"
-                    ),
-                    "vk_url": None,  # Скрываем техническую колонку с ссылкой
-            
-                    # 💬 Telegram: кликабельная ссылка, отображается как t.me/username
-                    "tg_display": st.column_config.LinkColumn(
-                        "Telegram",
-                        display_text=":parent",
-                        url="tg_url"
-                    ),
-                    "tg_url": None,  # Скрываем техническую колонку с ссылкой
-            
-                    "Группа": st.column_config.TextColumn("Группа"),
-                    "Первая оплата": st.column_config.TextColumn("Первая оплата")
-                },
-                use_container_width=True,
-                hide_index=True
-    )
+        display_df.columns = ['ID', 'Имя', 'Пол', 'Телефон', 'VK', 'Telegram', 'Группа', 'Первая оплата']
+        
+        # Отображаем форматированную таблицу
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        
+        st.markdown("---")
+        
+        # ✅ ИЗМЕНЁНО: Редактирование через выбор отдельной строки
+        st.markdown("### ✏️ Редактирование клиентов")
+        st.info("Выберите клиента из списка, чтобы отредактировать его данные. Изменения сохраняются автоматически.")
 
-        # --- ВЫБОР КЛИЕНТА ДЛЯ РЕДАКТИРОВАНИЯ ---
-        # Формируем список для выбора
-        clients_options = ["-- Выберите клиента для редактирования --"] + \
-                          [f"#{row['id']} {row['name']}" for _, row in clients_df_data.iterrows()]
-        
-        selected_client_opt = st.selectbox("Редактирование клиента", clients_options)
-        
-        if selected_client_opt != "-- Выберите клиента для редактирования --":
-            # Получаем ID из строки выбора
-            client_id = int(selected_client_opt.split()[0][1:])
-            client_row = clients_df_data[clients_df_data['id'] == client_id].iloc[0].to_frame().T
-            
-            st.markdown(f"#### ✏️ Редактирование клиента: {client_row['name'].iloc[0]}")
-            
-            # Подготовка данных для редактора (одна строка)
-            edit_df = client_row.copy()
-            edit_df['first_order_date'] = edit_df['first_order_date'].apply(format_date_display)
-            
-            edited_client = st.data_editor(
-                edit_df[['id', 'name', 'sex', 'phone', 'vk_id', 'tg_id', 'group_name', 'first_order_date']],
+        # Создаём варианты для выбора
+        client_edit_options = [f"Клиент #{row['id']} - {row['name']}" for idx, row in clients_df_data.iterrows()]
+        selected_client = st.selectbox(
+            "Выберите клиента для редактирования",
+            ["--- Выберите строку ---"] + client_edit_options,
+            key="client_selector"
+        )
+
+        # Если выбрана строка
+        if selected_client != "--- Выберите строку ---":
+            # Получаем ID выбранного клиента
+            selected_id = int(selected_client.split("#")[1].split(" - ")[0])
+            selected_row = clients_df_data[clients_df_data["id"] == selected_id].iloc[0]
+
+            # Подготавливаем данные для редактирования
+            editor_row = selected_row.to_frame().T
+            editor_row['first_order_date'] = editor_row['first_order_date'].apply(format_date_display)
+            editor_row['phone_display'] = editor_row['phone'].apply(format_phone)
+            editor_row['vk_display'] = editor_row['vk_id'].apply(format_vk)
+            editor_row['tg_display'] = editor_row['tg_id'].apply(format_telegram)
+
+            # Отображаем редактор только для одной строки
+            edited_row = st.data_editor(
+                editor_row[['id', 'name', 'sex', 'phone', 'vk_id', 'tg_id', 'group_name', 'first_order_date', 
+                           'phone_display', 'vk_display', 'tg_display']],
                 column_config={
                     "id": st.column_config.NumberColumn("ID", disabled=True),
                     "name": st.column_config.TextColumn("Имя"),
                     "sex": st.column_config.SelectboxColumn("Пол", options=["М", "Ж"]),
-                    "phone": st.column_config.TextColumn("Телефон"),
-                    "vk_id": st.column_config.TextColumn("VK ID"),
-                    "tg_id": st.column_config.TextColumn("Telegram"),
+                    "phone": st.column_config.TextColumn("Телефон (для редактирования)"),
+                    "vk_id": st.column_config.TextColumn("VK ID (для редактирования)"),
+                    "tg_id": st.column_config.TextColumn("Telegram (для редактирования)"),
                     "group_name": st.column_config.SelectboxColumn("Группа", options=["Без группы"] + groups_list),
                     "first_order_date": st.column_config.TextColumn("Первая оплата"),
+                    "phone_display": st.column_config.TextColumn("Телефон", disabled=True),
+                    "vk_display": st.column_config.TextColumn("VK", disabled=True),
+                    "tg_display": st.column_config.TextColumn("Telegram", disabled=True),
                 },
                 hide_index=True,
                 use_container_width=True,
-                key="edit_client_row",
-                num_rows="fixed"
+                key="clients_editor"
             )
-            
-            col_save, col_del = st.columns(2)
-            with col_del:
-                if st.button("🗑️ Удалить клиента", type="secondary"):
-                    # Проверка на заказы
-                    orders_check = run_query("SELECT COUNT(*) as count FROM orders WHERE client_id=?", (client_id,), fetch=True)
-                    if not orders_check.empty and orders_check['count'].iloc[0] > 0:
-                        st.error("❌ Нельзя удалить клиента, у которого есть заказы! Сначала удалите заказы.")
-                    else:
-                        run_query("DELETE FROM clients WHERE id=?", (client_id,))
-                        st.success("Клиент удален")
-                        st.rerun()
-            
-            # Сохранение изменений
-            if not edited_client.equals(edit_df):
-                new_row = edited_client.iloc[0]
-                group_name = new_row['group_name']
-                g_id = group_map.get(group_name) if group_name != "Без группы" else None
+
+            # Сохраняем изменения при их появлении
+            if not edited_row.equals(editor_row):
+                new_row = edited_row.iloc[0]
+                g_id = group_map.get(new_row['group_name']) if new_row['group_name'] != "Без группы" else None
                 first_order = parse_date_to_db(new_row['first_order_date'])
                 
                 run_query('''
@@ -451,7 +412,7 @@ if choice == "Клиенты и Группы":
                     new_row['tg_id'],
                     g_id,
                     first_order,
-                    client_id
+                    selected_id
                 ))
                 st.success("✅ Изменения сохранены!")
                 st.rerun()
@@ -462,7 +423,7 @@ if choice == "Клиенты и Группы":
 elif choice == "Прайс-лист Услуг":
     st.subheader("Справочник Услуг")
     
-    with st.expander("➕ Добавить новую услугу", expanded=False):
+    with st.expander("➕ Добавить новую услугу"):
         with st.form("add_service"):
             s_name = st.text_input("Наименование услуги")
             s_price_str = st.text_input("Мин. прайс ₽", placeholder="10 000")
@@ -479,24 +440,36 @@ elif choice == "Прайс-лист Услуг":
     services_df = run_query("SELECT * FROM services_catalog", fetch=True)
     
     if not services_df.empty:
-        # Просмотр
+        # Форматируем цену для отображения
         display_services = services_df.copy()
         display_services['min_price'] = display_services['min_price'].apply(lambda x: f"{format_currency(x)} ₽")
+        
+        # Переименовываем колонки
         display_services.columns = ['ID', 'Услуга', 'Мин. прайс', 'Описание']
+        
         st.dataframe(display_services, use_container_width=True, hide_index=True)
+        
+        # ✅ ИЗМЕНЁНО: Редактирование через выбор отдельной строки
+        st.markdown("### ✏️ Редактирование услуг")
+        st.info("Выберите услугу из списка, чтобы отредактировать её данные. Изменения сохраняются автоматически.")
 
-        # --- ВЫБОР УСЛУГИ ---
-        services_options = ["-- Выберите услугу для редактирования --"] + \
-                           [f"#{row['id']} {row['name']}" for _, row in services_df.iterrows()]
-        
-        selected_service_opt = st.selectbox("Редактирование услуги", services_options)
-        
-        if selected_service_opt != "-- Выберите услугу для редактирования --":
-            service_id = int(selected_service_opt.split()[0][1:])
-            service_row = services_df[services_df['id'] == service_id].iloc[0].to_frame().T
-            
-            edited_service = st.data_editor(
-                service_row,
+        # Создаём варианты для выбора
+        service_edit_options = [f"Услуга #{row['id']} - {row['name']}" for idx, row in services_df.iterrows()]
+        selected_service = st.selectbox(
+            "Выберите услугу для редактирования",
+            ["--- Выберите строку ---"] + service_edit_options,
+            key="service_selector"
+        )
+
+        # Если выбрана строка
+        if selected_service != "--- Выберите строку ---":
+            # Получаем ID выбранной услуги
+            selected_id = int(selected_service.split("#")[1].split(" - ")[0])
+            selected_row = services_df[services_df["id"] == selected_id].iloc[0]
+
+            # Отображаем редактор только для одной строки
+            edited_row = st.data_editor(
+                selected_row.to_frame().T,
                 column_config={
                     "id": st.column_config.NumberColumn("ID", disabled=True),
                     "name": st.column_config.TextColumn("Услуга"),
@@ -505,17 +478,12 @@ elif choice == "Прайс-лист Услуг":
                 },
                 hide_index=True,
                 use_container_width=True,
-                key="edit_service_row",
-                num_rows="fixed"
+                key="services_editor"
             )
-            
-            if st.button("🗑️ Удалить услугу", type="secondary"):
-                run_query("DELETE FROM services_catalog WHERE id=?", (service_id,))
-                st.success("Услуга удалена")
-                st.rerun()
-            
-            if not edited_service.equals(service_row):
-                new_row = edited_service.iloc[0]
+
+            # Сохраняем изменения при их появлении
+            if not edited_row.equals(selected_row.to_frame().T):
+                new_row = edited_row.iloc[0]
                 run_query('''
                     UPDATE services_catalog 
                     SET name=?, min_price=?, description=?
@@ -524,7 +492,7 @@ elif choice == "Прайс-лист Услуг":
                     new_row['name'],
                     new_row['min_price'],
                     new_row['description'],
-                    service_id
+                    selected_id
                 ))
                 st.success("✅ Изменения сохранены!")
                 st.rerun()
@@ -540,7 +508,7 @@ elif choice == "Заказы":
     client_map = dict(zip(clients_df['name'], clients_df['id'])) if not clients_df.empty else {}
     client_map_reverse = dict(zip(clients_df['id'], clients_df['name'])) if not clients_df.empty else {}
 
-    with st.expander("➕ Создать новый заказ", expanded=True):
+    with st.expander("➕ Создать новый заказ"):
         with st.form("new_order"):
             if client_names:
                 o_client = st.selectbox("Клиент", client_names)
@@ -603,58 +571,7 @@ elif choice == "Заказы":
     if not orders_df.empty:
         orders_df['client_name'] = orders_df['client_id'].map(client_map_reverse)
         
-        # --- ВЫБОР ЗАКАЗА ---
-        orders_options = ["-- Выберите заказ для редактирования --"] + \
-                         [f"#{row['id']} {row['client_name']} ({row['status']})" for _, row in orders_df.iterrows()]
-        
-        selected_order_opt = st.selectbox("Редактирование заказа", orders_options)
-        
-        if selected_order_opt != "-- Выберите заказ для редактирования --":
-            order_id = int(selected_order_opt.split()[0][1:])
-            order_row = orders_df[orders_df['id'] == order_id].iloc[0].to_frame().T
-            
-            st.markdown(f"#### ✏️ Редактирование заказа #{order_id}")
-            
-            # Подготовка даты
-            edit_df = order_row[['id', 'client_id', 'client_name', 'execution_date', 'status', 'total_amount']].copy()
-            edit_df['execution_date'] = edit_df['execution_date'].apply(format_date_display)
-            
-            edited_order = st.data_editor(
-                edit_df,
-                column_config={
-                    "id": st.column_config.NumberColumn("ID", disabled=True),
-                    "client_name": st.column_config.SelectboxColumn("Клиент", options=client_names, required=True),
-                    "execution_date": st.column_config.TextColumn("Дата исполнения"),
-                    "status": st.column_config.SelectboxColumn("Статус", options=STATUS_LIST, required=True),
-                    "total_amount": st.column_config.TextColumn("Сумма", disabled=True)
-                },
-                hide_index=True,
-                use_container_width=True,
-                key="edit_order_row",
-                num_rows="fixed"
-            )
-            
-            if st.button("🗑️ Удалить заказ", type="secondary"):
-                run_query("DELETE FROM orders WHERE id=?", (order_id,))
-                st.success("Заказ удален")
-                st.rerun()
-            
-            if not edited_order.equals(edit_df):
-                new_row = edited_order.iloc[0]
-                client_id = client_map.get(new_row['client_name'])
-                exec_date = parse_date_to_db(new_row['execution_date'])
-                
-                run_query('''
-                    UPDATE orders 
-                    SET client_id=?, execution_date=?, status=?
-                    WHERE id=?
-                ''', (client_id, exec_date, new_row['status'], order_id))
-                st.success("✅ Изменения сохранены!")
-                st.rerun()
-        
-        st.markdown("---")
-        
-        # Статистика и просмотр
+        # Статистика за текущий месяц (по дате оплаты!)
         current_month_start = date.today().replace(day=1).strftime("%Y-%m-%d")
         stats_df = run_query('''
             SELECT oi.amount, o.status 
@@ -677,12 +594,74 @@ elif choice == "Заказы":
             in_work = len(orders_df[orders_df['status'] == 'В работе'])
             st.metric("В работе", in_work)
 
+        # Таблица заказов для отображения
         display_orders = orders_df[['id', 'client_name', 'execution_date', 'status', 'total_amount']].copy()
         display_orders['execution_date'] = display_orders['execution_date'].apply(format_date_display)
         display_orders['total_amount'] = display_orders['total_amount'].apply(lambda x: f"{format_currency(x)} ₽")
         display_orders.columns = ['ID', 'Клиент', 'Дата исполнения', 'Статус', 'Сумма']
         
         st.dataframe(display_orders, use_container_width=True, hide_index=True)
+        
+        # ✅ ИЗМЕНЁНО: Редактирование через выбор отдельной строки
+        st.markdown("### ✏️ Редактирование заказов")
+        st.info("Выберите заказ из списка, чтобы отредактировать его данные. Изменения сохраняются автоматически.")
+
+        # Создаём варианты для выбора
+        order_edit_options = [f"Заказ #{row['id']} - {row['client_name']}" for idx, row in orders_df.iterrows()]
+        selected_order = st.selectbox(
+            "Выберите заказ для редактирования",
+            ["--- Выберите строку ---"] + order_edit_options,
+            key="order_selector"
+        )
+
+        # Если выбрана строка
+        if selected_order != "--- Выберите строку ---":
+            # Получаем ID выбранного заказа
+            selected_id = int(selected_order.split("#")[1].split(" - ")[0])
+            selected_row = orders_df[orders_df["id"] == selected_id].iloc[0]
+
+            # Подготавливаем данные для редактирования
+            editor_row = selected_row.to_frame().T
+            editor_row['execution_date'] = editor_row['execution_date'].apply(format_date_display)
+            editor_row['total_display'] = editor_row['total_amount'].apply(lambda x: f"{format_currency(x)} ₽")
+
+            # Отображаем редактор только для одной строки
+            edited_row = st.data_editor(
+                editor_row[['id', 'client_name', 'execution_date', 'status', 'total_amount', 'total_display']],
+                column_config={
+                    "id": st.column_config.NumberColumn("ID", disabled=True),
+                    "client_name": st.column_config.SelectboxColumn(
+                        "Клиент",
+                        options=client_names,
+                        required=True
+                    ),
+                    "execution_date": st.column_config.TextColumn("Дата исполнения"),
+                    "status": st.column_config.SelectboxColumn(
+                        "Статус",
+                        options=STATUS_LIST,
+                        required=True
+                    ),
+                    "total_amount": st.column_config.TextColumn("Сумма", disabled=True),
+                    "total_display": st.column_config.TextColumn("Сумма", disabled=True)
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="orders_editor"
+            )
+
+            # Сохраняем изменения при их появлении
+            if not edited_row.equals(editor_row):
+                new_row = edited_row.iloc[0]
+                client_id = client_map.get(new_row['client_name'])
+                exec_date = parse_date_to_db(new_row['execution_date'])
+                
+                run_query('''
+                    UPDATE orders 
+                    SET client_id=?, execution_date=?, status=?
+                    WHERE id=?
+                ''', (client_id, exec_date, new_row['status'], selected_id))
+                st.success("✅ Изменения сохранены!")
+                st.rerun()
     else:
         st.info("Заказы не найдены")
 
@@ -700,8 +679,6 @@ elif choice == "Детализация Заказа":
             lambda x: f"Заказ #{x['id']} - {x['name']} ({format_date_display(x['execution_date'])})", 
             axis=1
         )
-        
-        # Выбор заказа
         order_selection = st.selectbox("Выберите заказ", orders_df['label'])
         order_id = int(orders_df[orders_df['label'] == order_selection]['id'].iloc[0])
         
@@ -713,15 +690,18 @@ elif choice == "Детализация Заказа":
         services_cat = run_query("SELECT name FROM services_catalog", fetch=True)
         srv_list = services_cat['name'].tolist() if not services_cat.empty else []
         
-        col1, col2 = st.columns([1, 2])
+        col1, col2 = st.columns(2)
         
         with col1:
             st.markdown("#### ➕ Добавить услугу")
             with st.form("add_item_form"):
                 service_choice = st.selectbox("Услуга", srv_list if srv_list else ["Нет услуг в каталоге"])
                 i_date = st.date_input("Дата оплаты", value=date.today())
+                
+                # Поле суммы с форматированием
                 amount_str = st.text_input("Сумма ₽", value="0", placeholder="10 000")
                 i_amount = parse_currency(amount_str)
+                
                 i_hours = st.text_input("Кол-во часов", value="0", placeholder="1.5")
                 try:
                     i_hours_val = float(i_hours.replace(",", ".")) if i_hours else 0.0
@@ -736,11 +716,19 @@ elif choice == "Детализация Заказа":
                             VALUES (?,?,?,?,?)''',
                             (order_id, service_choice, i_date.strftime("%Y-%m-%d"), i_amount, i_hours_val)
                         )
-                        total_res = run_query("SELECT SUM(amount) as total FROM order_items WHERE order_id=?", (order_id,), fetch=True)
+                        # Обновляем сумму заказа
+                        total_res = run_query(
+                            "SELECT SUM(amount) as total FROM order_items WHERE order_id=?",
+                            (order_id,),
+                            fetch=True
+                        )
                         total = total_res['total'].iloc[0] if not total_res.empty and total_res['total'].iloc[0] else 0.0
                         run_query("UPDATE orders SET total_amount=? WHERE id=?", (total, order_id))
+                        
+                        # Обновляем first_order_date клиента
                         if current_client_id:
                             update_client_first_order_date(current_client_id)
+                        
                         st.success("✅ Услуга добавлена!")
                         st.rerun()
                     else:
@@ -757,48 +745,64 @@ elif choice == "Детализация Заказа":
             )
             
             if not items_df.empty:
-                # --- ВЫБОР УСЛУГИ В ЗАКАЗЕ ДЛЯ РЕДАКТИРОВАНИЯ ---
-                items_options = ["-- Выберите услугу для редактирования --"] + \
-                                [f"#{row['id']} {row['service_name']} ({format_currency(row['amount'])} ₽)" for _, row in items_df.iterrows()]
+                # Форматируем для отображения
+                display_items = items_df.copy()
+                display_items['payment_date'] = display_items['payment_date'].apply(format_date_display)
+                display_items['amount'] = display_items['amount'].apply(lambda x: f"{format_currency(x)} ₽")
+                display_items['hours'] = display_items['hours'].apply(lambda x: f"{float(x):.1f}" if pd.notna(x) else "0.0")
+                display_items.columns = ['ID', 'Услуга', 'Дата оплаты', 'Сумма', 'Часы']
                 
-                selected_item_opt = st.selectbox("Редактирование услуги в заказе", items_options)
+                st.dataframe(display_items, use_container_width=True, hide_index=True)
+
+                # Итого
+                total_amount = items_df['amount'].sum()
+                st.success(f"💰 **Итого:** {format_currency(total_amount)} ₽")
                 
-                if selected_item_opt != "-- Выберите услугу для редактирования --":
-                    item_id = int(selected_item_opt.split()[0][1:])
-                    item_row = items_df[items_df['id'] == item_id].iloc[0].to_frame().T
-                    
-                    st.markdown("#### ✏️ Редактирование услуги в заказе")
-                    
-                    edit_item_df = item_row.copy()
-                    edit_item_df['payment_date'] = edit_item_df['payment_date'].apply(format_date_display)
-                    
-                    edited_item = st.data_editor(
-                        edit_item_df,
+                # ✅ ИЗМЕНЁНО: Редактирование через выбор отдельной строки
+                st.markdown("---")
+                st.markdown("#### ✏️ Редактирование услуг")
+                st.info("Выберите услугу из заказа, чтобы отредактировать её данные. Изменения сохраняются автоматически.")
+
+                # Создаём варианты для выбора
+                item_edit_options = [f"Услуга #{row['id']} - {row['service_name']}" for idx, row in items_df.iterrows()]
+                selected_item = st.selectbox(
+                    "Выберите услугу для редактирования",
+                    ["--- Выберите строку ---"] + item_edit_options,
+                    key="item_selector"
+                )
+
+                # Если выбрана строка
+                if selected_item != "--- Выберите строку ---":
+                    # Получаем ID выбранной услуги
+                    selected_id = int(selected_item.split("#")[1].split(" - ")[0])
+                    selected_row = items_df[items_df["id"] == selected_id].iloc[0]
+
+                    # Подготавливаем данные для редактирования
+                    editor_row = selected_row.to_frame().T
+                    editor_row['payment_date'] = editor_row['payment_date'].apply(format_date_display)
+
+                    # Отображаем редактор только для одной строки
+                    edited_row = st.data_editor(
+                        editor_row,
                         column_config={
                             "id": st.column_config.NumberColumn("ID", disabled=True),
-                            "service_name": st.column_config.SelectboxColumn("Услуга", options=srv_list, required=True),
+                            "service_name": st.column_config.SelectboxColumn(
+                                "Услуга",
+                                options=srv_list,
+                                required=True
+                            ),
                             "payment_date": st.column_config.TextColumn("Дата оплаты"),
                             "amount": st.column_config.NumberColumn("Сумма", format="%.0f"),
                             "hours": st.column_config.NumberColumn("Часы", format="%.1f", step=0.1)
                         },
                         hide_index=True,
                         use_container_width=True,
-                        key="edit_item_row",
-                        num_rows="fixed"
+                        key="items_editor"
                     )
-                    
-                    if st.button("🗑️ Удалить услугу из заказа", type="secondary", key="del_item"):
-                        run_query("DELETE FROM order_items WHERE id=?", (item_id,))
-                        total_res = run_query("SELECT SUM(amount) as total FROM order_items WHERE order_id=?", (order_id,), fetch=True)
-                        total = total_res['total'].iloc[0] if not total_res.empty and total_res['total'].iloc[0] else 0.0
-                        run_query("UPDATE orders SET total_amount=? WHERE id=?", (total, order_id))
-                        if current_client_id:
-                            update_client_first_order_date(current_client_id)
-                        st.success("Услуга удалена")
-                        st.rerun()
-                    
-                    if not edited_item.equals(edit_item_df):
-                        new_row = edited_item.iloc[0]
+
+                    # Сохраняем изменения при их появлении
+                    if not edited_row.equals(editor_row):
+                        new_row = edited_row.iloc[0]
                         payment_date_val = parse_date_to_db(new_row['payment_date'])
                         amount_val = float(new_row['amount'])
                         hours_val = float(new_row['hours'])
@@ -812,30 +816,24 @@ elif choice == "Детализация Заказа":
                             payment_date_val,
                             amount_val,
                             hours_val,
-                            item_id
+                            selected_id
                         ))
-                        
-                        total_res = run_query("SELECT SUM(amount) as total FROM order_items WHERE order_id=?", (order_id,), fetch=True)
+                
+                        # Обновляем сумму заказа
+                        total_res = run_query(
+                            "SELECT SUM(amount) as total FROM order_items WHERE order_id=?",
+                            (order_id,),
+                            fetch=True
+                        )
                         total = total_res['total'].iloc[0] if not total_res.empty and total_res['total'].iloc[0] else 0.0
                         run_query("UPDATE orders SET total_amount=? WHERE id=?", (total, order_id))
+                        
+                        # Обновляем first_order_date клиента
                         if current_client_id:
                             update_client_first_order_date(current_client_id)
                         
                         st.success("✅ Изменения сохранены!")
                         st.rerun()
-                
-                st.markdown("---")
-                
-                # Просмотр списка услуг
-                display_items = items_df.copy()
-                display_items['payment_date'] = display_items['payment_date'].apply(format_date_display)
-                display_items['amount'] = display_items['amount'].apply(lambda x: f"{format_currency(x)} ₽")
-                display_items['hours'] = display_items['hours'].apply(lambda x: f"{float(x):.1f}" if pd.notna(x) else "0.0")
-                display_items.columns = ['ID', 'Услуга', 'Дата оплаты', 'Сумма', 'Часы']
-                st.dataframe(display_items, use_container_width=True, hide_index=True)
-
-                total_amount = items_df['amount'].sum()
-                st.success(f"💰 **Итого:** {format_currency(total_amount)} ₽")
             else:
                 st.info("В этом заказе пока нет услуг")
     else:
@@ -845,6 +843,7 @@ elif choice == "Детализация Заказа":
 elif choice == "ОТЧЁТЫ":
     st.header("📊 Аналитические Отчёты")
     
+    # Основной запрос — по дате оплаты!
     main_query = '''
     SELECT 
         oi.id as item_id,
@@ -938,6 +937,7 @@ elif choice == "ОТЧЁТЫ":
         ).reset_index()
         df_4['Средний_месячный'] = df_4['Сумма_год'] / 12
         
+        # Копия для графика
         df_4_chart = df_4[['year', 'Сумма_год']].copy()
         
         df_4['Макс_оплата'] = df_4['Макс_оплата'].apply(lambda x: f"{format_currency(x)} ₽")
