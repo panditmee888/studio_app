@@ -70,27 +70,6 @@ def get_telegram_link(tg_str):
     tg = tg.replace("https://", "").replace("http://", "").replace("@", "").replace("t.me/", "")
     return f"https://t.me/{tg}"
 
-def make_clickable_phone(phone):
-    """Создаёт кликабельную ссылку для телефона"""
-    if not phone or pd.isna(phone):
-        return ""
-    digits = ''.join(filter(str.isdigit, str(phone)))
-    return f'<a href="tel:+{digits}">{phone}</a>'
-
-def make_clickable_vk(vk):
-    """Создаёт кликабельную ссылку для VK"""
-    if not vk or pd.isna(vk):
-        return ""
-    url = vk if vk.startswith("http") else f"https://{vk}"
-    return f'<a href="{url}" target="_blank">{vk}</a>'
-
-def make_clickable_tg(tg):
-    """Создаёт кликабельную ссылку для Telegram"""
-    if not tg or pd.isna(tg):
-        return ""
-    url = tg if tg.startswith("http") else f"https://{tg}"
-    return f'<a href="{url}" target="_blank">{tg}</a>'
-
 def format_date_display(date_str):
     """Форматирование даты в dd.mm.yyyy"""
     if pd.isna(date_str) or date_str is None or date_str == '':
@@ -346,26 +325,50 @@ if choice == "Клиенты и Группы":
     if not clients_df_data.empty:
         st.info(f"Найдено клиентов: {len(clients_df_data)}")
         
-        # Создаём копию для отображения с кликабельными ссылками
+        # ✅ ИСПРАВЛЁННЫЙ КОД ДЛЯ ТАБЛИЦЫ С КЛИКАБЕЛЬНЫМИ ССЫЛКАМИ
         display_df = clients_df_data.copy()
         display_df['first_order_date'] = display_df['first_order_date'].apply(format_date_display)
-        display_df['phone'] = display_df['phone'].apply(format_phone)
-        display_df['vk_id'] = display_df['vk_id'].apply(format_vk)
-        display_df['tg_id'] = display_df['tg_id'].apply(format_telegram)
+
+        # Формируем отображаемые значения и рабочие ссылки
+        display_df['phone_display'] = display_df['phone'].apply(format_phone)
+        display_df['vk_display'] = display_df['vk_id'].apply(format_vk)
+        display_df['tg_display'] = display_df['tg_id'].apply(format_telegram)
+
+        display_df['phone_link'] = display_df['phone'].apply(get_phone_link)
+        display_df['vk_link'] = display_df['vk_id'].apply(get_vk_link)
+        display_df['tg_link'] = display_df['tg_id'].apply(get_telegram_link)
+
+        # Выводим готовую таблицу
+        st.dataframe(
+            display_df[['id', 'name', 'sex', 'phone_link', 'phone_display', 'vk_link', 'vk_display', 'tg_link', 'tg_display', 'group_name', 'first_order_date']],
+            column_config={
+                "id": "ID",
+                "name": "Имя",
+                "sex": "Пол",
+                "group_name": "Группа",
+                "first_order_date": "Первая оплата",
         
-        # Создаём HTML таблицу с кликабельными ссылками
-        html_df = display_df.copy()
-        html_df['phone'] = html_df['phone'].apply(make_clickable_phone)
-        html_df['vk_id'] = html_df['vk_id'].apply(make_clickable_vk)
-        html_df['tg_id'] = html_df['tg_id'].apply(make_clickable_tg)
+                # ✅ Исправленные кликабельные ссылки
+                "phone_link": st.column_config.LinkColumn(
+                    "Телефон",
+                    display_text="phone_display"  # Теперь передаём только название колонки
+                ),
+                "vk_link": st.column_config.LinkColumn(
+                    "VK",
+                    display_text="vk_display"
+                ),
+                "tg_link": st.column_config.LinkColumn(
+                    "Telegram",
+                    display_text="tg_display"
+                ),
         
-        # Переименовываем колонки
-        html_df.columns = ['ID', 'Имя', 'Пол', 'Телефон', 'VK', 'Telegram', 'Группа', 'Первая оплата']
-        
-        # Отображаем HTML таблицу
-        st.markdown(
-            html_df.to_html(escape=False, index=False),
-            unsafe_allow_html=True
+                # Скрываем вспомогательные колонки, чтобы они не отображались в таблице
+                "phone_display": None,
+                "vk_display": None,
+                "tg_display": None
+            },
+            use_container_width=True,
+            hide_index=True
 	)
 
         # --- ВЫБОР КЛИЕНТА ДЛЯ РЕДАКТИРОВАНИЯ ---
