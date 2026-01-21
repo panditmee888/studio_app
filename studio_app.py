@@ -434,7 +434,7 @@ if choice == "Клиенты и Группы":
 elif choice == "Прайс-лист Услуг":
     st.subheader("Справочник Услуг")
     
-    with st.expander("➕ Добавить новую услугу", expanded=True):
+    with st.expander("➕ Добавить новую услугу", expanded=False):
         with st.form("add_service"):
             s_name = st.text_input("Наименование услуги")
             s_price_str = st.text_input("Мин. прайс ₽", placeholder="10 000")
@@ -451,6 +451,12 @@ elif choice == "Прайс-лист Услуг":
     services_df = run_query("SELECT * FROM services_catalog", fetch=True)
     
     if not services_df.empty:
+        # Просмотр
+        display_services = services_df.copy()
+        display_services['min_price'] = display_services['min_price'].apply(lambda x: f"{format_currency(x)} ₽")
+        display_services.columns = ['ID', 'Услуга', 'Мин. прайс', 'Описание']
+        st.dataframe(display_services, use_container_width=True, hide_index=True)
+
         # --- ВЫБОР УСЛУГИ ---
         services_options = ["-- Выберите услугу для редактирования --"] + \
                            [f"#{row['id']} {row['name']}" for _, row in services_df.iterrows()]
@@ -496,14 +502,6 @@ elif choice == "Прайс-лист Услуг":
                 ))
                 st.success("✅ Изменения сохранены!")
                 st.rerun()
-        
-        st.markdown("---")
-        
-        # Просмотр
-        display_services = services_df.copy()
-        display_services['min_price'] = display_services['min_price'].apply(lambda x: f"{format_currency(x)} ₽")
-        display_services.columns = ['ID', 'Услуга', 'Мин. прайс', 'Описание']
-        st.dataframe(display_services, use_container_width=True, hide_index=True)
     else:
         st.info("Услуги еще не добавлены")
 
