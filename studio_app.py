@@ -282,8 +282,6 @@ if choice == "Клиенты и Группы":
                                 st.rerun()
             else:
                 st.info("Групп пока нет")
-
-    st.markdown("---")
     
     # Поиск и фильтрация
     search_col1, search_col2 = st.columns([2, 1])
@@ -466,8 +464,6 @@ elif choice == "Прайс-лист Услуг":
         if selected_service_opt != "-- Выберите услугу для редактирования --":
             service_id = int(selected_service_opt.split()[0][1:])
             service_row = services_df[services_df['id'] == service_id].iloc[0].to_frame().T
-            
-            st.markdown(f"#### ✏️ Редактирование услуги: {service_row['name'].iloc[0]}")
             
             edited_service = st.data_editor(
                 service_row,
