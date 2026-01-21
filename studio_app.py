@@ -333,7 +333,7 @@ if choice == "Клиенты и Группы":
     
         # Форматируем контакты для отображения и готовим ссылки
         display_df['phone_display'] = display_df['phone'].apply(format_phone)
-        display_df['phone_url'] = display_df['phone'].apply(get_phone_url)
+        display_df['phone_url'] = display_df['phone'].apply(get_phone_link)
     
         display_df['vk_display'] = display_df['vk_id'].apply(format_vk)
         display_df['vk_url'] = display_df['vk_id'].apply(lambda x: f"https://{format_vk(x)}" if format_vk(x) else "")
