@@ -28,10 +28,10 @@ def format_vk(vk_str):
         return ""
     vk = str(vk_str).strip()
     vk = vk.replace("https://", "").replace("http://", "")
-    if vk.startswith("vk.com/"):
+    if vk.startswith("vk.com/id"):
         return vk
     if vk.startswith("id") and vk[2:].isdigit():
-        return f"vk.com/{vk}"
+        return f"vk.com/id{vk}"
     if vk.isdigit():
         return f"vk.com/id{vk}"
     return f"vk.com/{vk}"
@@ -60,8 +60,8 @@ def get_vk_link(vk_str):
     """Генерация полной ссылки VK"""
     if not vk_str: return ""
     vk = str(vk_str).strip()
-    vk = vk.replace("https://", "").replace("http://", "").replace("vk.com/", "")
-    return f"https://vk.com/{vk}"
+    vk = vk.replace("https://", "").replace("http://", "").replace("vk.com/id", "")
+    return f"https://vk.com/id{vk}"
 
 def get_telegram_link(tg_str):
     """Генерация полной ссылки Telegram"""
@@ -217,7 +217,7 @@ if choice == "Клиенты и Группы":
     group_map = dict(zip(groups_df['name'], groups_df['id'])) if not groups_df.empty else {}
     
     # Форма добавления клиента
-    with st.expander("➕ Добавить нового клиента", expanded=True):
+    with st.expander("➕ Добавить нового клиента", expanded=False):
         with st.form("add_client"):
             c_name = st.text_input("Имя *", placeholder="Иван Иванов")
             c_sex = st.selectbox("Пол", ["М", "Ж"])
@@ -327,6 +327,33 @@ if choice == "Клиенты и Группы":
     if not clients_df_data.empty:
         st.info(f"Найдено клиентов: {len(clients_df_data)}")
         
+        # --- ТАБЛИЦА ДЛЯ ПРОСМОТРА (С ССЫЛКАМИ) ---
+        display_df = clients_df_data.copy()
+        display_df['first_order_date'] = display_df['first_order_date'].apply(format_date_display)
+        
+        # Формируем колонки ссылок
+        display_df['phone_link'] = display_df['phone'].apply(get_phone_link)
+        display_df['vk_link'] = display_df['vk_id'].apply(get_vk_link)
+        display_df['tg_link'] = display_df['tg_id'].apply(get_telegram_link)
+        
+        display_df['phone_display'] = display_df['phone'].apply(format_phone)
+        display_df['vk_display'] = display_df['vk_id'].apply(format_vk)
+        display_df['tg_display'] = display_df['tg_id'].apply(format_telegram)
+        
+        st.dataframe(
+            display_df[['id', 'name', 'sex', 'phone_link', 'vk_link', 'tg_link', 'group_name', 'first_order_date']],
+            column_config={
+                "id": "ID",
+                "name": "Имя",
+                "sex": "Пол",
+                "group_name": "Группа",
+                "first_order_date": "Первая оплата",
+                "phone_link": st.column_config.LinkColumn("Телефон", display_text="phone_display"),
+                "vk_link": st.column_config.LinkColumn("VK", display_text="vk_display"),
+                "tg_link": st.column_config.LinkColumn("Telegram", display_text="tg_display"),
+            },
+            use_container_width=True,
+            hide_index=True
         # --- ВЫБОР КЛИЕНТА ДЛЯ РЕДАКТИРОВАНИЯ ---
         # Формируем список для выбора
         clients_options = ["-- Выберите клиента для редактирования --"] + \
@@ -398,36 +425,6 @@ if choice == "Клиенты и Группы":
                 ))
                 st.success("✅ Изменения сохранены!")
                 st.rerun()
-        
-        st.markdown("---")
-        
-        # --- ТАБЛИЦА ДЛЯ ПРОСМОТРА (С ССЫЛКАМИ) ---
-        display_df = clients_df_data.copy()
-        display_df['first_order_date'] = display_df['first_order_date'].apply(format_date_display)
-        
-        # Формируем колонки ссылок
-        display_df['phone_link'] = display_df['phone'].apply(get_phone_link)
-        display_df['vk_link'] = display_df['vk_id'].apply(get_vk_link)
-        display_df['tg_link'] = display_df['tg_id'].apply(get_telegram_link)
-        
-        display_df['phone_display'] = display_df['phone'].apply(format_phone)
-        display_df['vk_display'] = display_df['vk_id'].apply(format_vk)
-        display_df['tg_display'] = display_df['tg_id'].apply(format_telegram)
-        
-        st.dataframe(
-            display_df[['id', 'name', 'sex', 'phone_link', 'vk_link', 'tg_link', 'group_name', 'first_order_date']],
-            column_config={
-                "id": "ID",
-                "name": "Имя",
-                "sex": "Пол",
-                "group_name": "Группа",
-                "first_order_date": "Первая оплата",
-                "phone_link": st.column_config.LinkColumn("Телефон", display_text="phone_display"),
-                "vk_link": st.column_config.LinkColumn("VK", display_text="vk_display"),
-                "tg_link": st.column_config.LinkColumn("Telegram", display_text="tg_display"),
-            },
-            use_container_width=True,
-            hide_index=True
         )
     else:
         st.info("Клиенты не найдены")
