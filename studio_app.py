@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 from datetime import datetime, date, timedelta
+import re
 
 # --- КОНСТАНТЫ ---
 STATUS_LIST = ["В работе", "Ожидает оплаты", "Выполнен", "Оплачен"]
@@ -196,10 +197,29 @@ if choice == "Клиенты и Группы":
         with st.form("add_client"):
             c_name = st.text_input("Имя *", placeholder="Иван Иванов")
             c_sex = st.selectbox("Пол", ["М", "Ж"])
-            c_phone_raw = st.text_input("Телефон", placeholder="+7 999 123-45-67")
-            c_vk_raw = st.text_input("VK ID", placeholder="id123456789 или username")
-            c_tg_raw = st.text_input("Telegram", placeholder="username (без @)")
             
+            # Телефон — вводим в любом формате, сохраняем как есть
+            c_phone_raw = st.text_input(
+                "Телефон", 
+                placeholder="Введите номер телефона",
+                help="Введите номер в любом формате, он будет автоматически отформатирован для отображения"
+            )
+            
+            # VK ID — вводим как есть
+            c_vk_raw = st.text_input(
+                "VK ID", 
+                placeholder="id123456789 или username",
+                help="Введите ID или username, ссылка сформируется автоматически"
+            )
+            
+            # Telegram — вводим как есть
+            c_tg_raw = st.text_input(
+                "Telegram", 
+                placeholder="username (без @)",
+                help="Введите username без @, ссылка сформируется автоматически"
+            )
+            
+            # Группа
             if groups_list:
                 c_group = st.selectbox("Группа", options=["Без группы"] + groups_list)
             else:
@@ -208,6 +228,7 @@ if choice == "Клиенты и Группы":
             
             if st.form_submit_button("Сохранить клиента"):
                 if c_name:
+                    # Сохраняем сырые данные (без форматирования)
                     phone = c_phone_raw if c_phone_raw else ""
                     vk = c_vk_raw if c_vk_raw else ""
                     tg = c_tg_raw if c_tg_raw else ""
@@ -239,7 +260,12 @@ if choice == "Клиенты и Группы":
                 for idx, row in groups_df.iterrows():
                     col_a, col_b, col_c = st.columns([3, 1, 1])
                     with col_a:
-                        new_name = st.text_input("Название", value=row['name'], key=f"group_name_{row['id']}", label_visibility="collapsed")
+                        new_name = st.text_input(
+                            "Название", 
+                            value=row['name'], 
+                            key=f"group_name_{row['id']}",
+                            label_visibility="collapsed"
+                        )
                     with col_b:
                         if st.button("💾", key=f"update_{row['id']}", help="Сохранить"):
                             if new_name and new_name != row['name']:
@@ -248,7 +274,11 @@ if choice == "Клиенты и Группы":
                                 st.rerun()
                     with col_c:
                         if st.button("🗑️", key=f"delete_{row['id']}", help="Удалить"):
-                            clients_check = run_query("SELECT COUNT(*) as count FROM clients WHERE group_id=?", (row['id'],), fetch=True)
+                            clients_check = run_query(
+                                "SELECT COUNT(*) as count FROM clients WHERE group_id=?", 
+                                (row['id'],), 
+                                fetch=True
+                            )
                             if not clients_check.empty and clients_check['count'].iloc[0] > 0:
                                 st.warning("Нельзя удалить группу с клиентами!")
                             else:
@@ -302,87 +332,84 @@ if choice == "Клиенты и Группы":
     if not clients_df_data.empty:
         st.info(f"Найдено клиентов: {len(clients_df_data)}")
         
-        # Создаём таблицу с кнопками редактирования
-        for idx, row in clients_df_data.iterrows():
-            with st.container():
-                cols = st.columns([0.5, 0.5, 2, 0.5, 1.5, 1.5, 1.5, 1.2, 1.2])
-                
-                with cols[0]:
-                    if st.button("✏️", key=f"edit_client_{row['id']}", help="Редактировать"):
-                        st.session_state["edit_client_id"] = row['id']
-                
-                with cols[1]:
-                    st.write(f"**{row['id']}**")
-                with cols[2]:
-                    st.write(row['name'])
-                with cols[3]:
-                    st.write(row['sex'])
-                with cols[4]:
-                    st.write(format_phone(row['phone']))
-                with cols[5]:
-                    st.write(format_vk(row['vk_id']))
-                with cols[6]:
-                    st.write(format_telegram(row['tg_id']))
-                with cols[7]:
-                    st.write(row['group_name'])
-                with cols[8]:
-                    st.write(format_date_display(row['first_order_date']))
+        # Создаём копию для отображения с форматированием
+        display_df = clients_df_data.copy()
+        display_df['first_order_date'] = display_df['first_order_date'].apply(format_date_display)
+        display_df['phone'] = display_df['phone'].apply(format_phone)
+        display_df['vk_id'] = display_df['vk_id'].apply(format_vk)
+        display_df['tg_id'] = display_df['tg_id'].apply(format_telegram)
         
-        # Заголовки таблицы
+        # Переименовываем колонки для отображения
+        display_df.columns = ['ID', 'Имя', 'Пол', 'Телефон', 'VK', 'Telegram', 'Группа', 'Первая оплата']
+        
+        # Отображаем форматированную таблицу
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        
         st.markdown("---")
-        header_cols = st.columns([0.5, 0.5, 2, 0.5, 1.5, 1.5, 1.5, 1.2, 1.2])
-        headers = ["", "ID", "Имя", "Пол", "Телефон", "VK", "Telegram", "Группа", "Первая оплата"]
-        for col, header in zip(header_cols, headers):
-            with col:
-                st.caption(header)
         
-        # Форма редактирования клиента
-        if "edit_client_id" in st.session_state:
-            selected_id = st.session_state["edit_client_id"]
-            client_row = clients_df_data[clients_df_data['id'] == selected_id]
-            
-            if not client_row.empty:
-                client_row = client_row.iloc[0]
-                st.markdown("---")
-                st.markdown(f"### ✏️ Редактирование клиента #{selected_id}")
+        # Редактирование через data_editor (используем сырые данные)
+        st.markdown("### ✏️ Редактирование клиентов")
+        st.info("Дважды кликните по ячейке для редактирования. Изменения сохранятся автоматически.")
+        
+        # Подготовка данных для data_editor (используем сырые данные)
+        editor_df = clients_df_data.copy()
+        editor_df['first_order_date'] = editor_df['first_order_date'].apply(format_date_display)
+        
+        # Добавляем колонку для отображения (форматированная)
+        editor_df['phone_display'] = editor_df['phone'].apply(format_phone)
+        editor_df['vk_display'] = editor_df['vk_id'].apply(format_vk)
+        editor_df['tg_display'] = editor_df['tg_id'].apply(format_telegram)
+        
+        # Редактируем только сырые колонки
+        edited_clients = st.data_editor(
+            editor_df[['id', 'name', 'sex', 'phone', 'vk_id', 'tg_id', 'group_name', 'first_order_date', 
+                       'phone_display', 'vk_display', 'tg_display']],
+            column_config={
+                "id": st.column_config.NumberColumn("ID", disabled=True),
+                "name": st.column_config.TextColumn("Имя"),
+                "sex": st.column_config.SelectboxColumn("Пол", options=["М", "Ж"]),
+                "phone": st.column_config.TextColumn("Телефон (для редактирования)"),
+                "vk_id": st.column_config.TextColumn("VK ID (для редактирования)"),
+                "tg_id": st.column_config.TextColumn("Telegram (для редактирования)"),
+                "group_name": st.column_config.SelectboxColumn("Группа", options=["Без группы"] + groups_list),
+                "first_order_date": st.column_config.TextColumn("Первая оплата"),
+                "phone_display": st.column_config.TextColumn("Телефон", disabled=True),
+                "vk_display": st.column_config.TextColumn("VK", disabled=True),
+                "tg_display": st.column_config.TextColumn("Telegram", disabled=True),
+            },
+            hide_index=True,
+            use_container_width=True,
+            key="clients_editor"
+        )
+
+        # Сохранение изменений
+        if not edited_clients.equals(editor_df):
+            for idx in range(len(edited_clients)):
+                orig_row = editor_df.iloc[idx]
+                new_row = edited_clients.iloc[idx]
                 
-                with st.form("edit_client_form"):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        edit_name = st.text_input("Имя", value=client_row['name'])
-                        edit_sex = st.selectbox("Пол", ["М", "Ж"], index=0 if client_row['sex'] == "М" else 1)
-                        edit_phone = st.text_input("Телефон", value=client_row['phone'] or "")
-                    with col2:
-                        edit_vk = st.text_input("VK ID", value=client_row['vk_id'] or "")
-                        edit_tg = st.text_input("Telegram", value=client_row['tg_id'] or "")
-                        edit_group = st.selectbox(
-                            "Группа",
-                            ["Без группы"] + groups_list,
-                            index=(groups_list.index(client_row['group_name']) + 1) if client_row['group_name'] in groups_list else 0
-                        )
+                if not orig_row.equals(new_row):
+                    client_id = int(new_row['id'])
+                    group_name = new_row['group_name']
+                    g_id = group_map.get(group_name) if group_name != "Без группы" else None
+                    first_order = parse_date_to_db(new_row['first_order_date'])
                     
-                    col_save, col_delete, col_cancel = st.columns(3)
-                    with col_save:
-                        if st.form_submit_button("💾 Сохранить", use_container_width=True):
-                            g_id = group_map.get(edit_group) if edit_group != "Без группы" else None
-                            run_query('''
-                                UPDATE clients 
-                                SET name=?, sex=?, phone=?, vk_id=?, tg_id=?, group_id=?
-                                WHERE id=?
-                            ''', (edit_name, edit_sex, edit_phone, edit_vk, edit_tg, g_id, selected_id))
-                            st.success("✅ Клиент обновлён!")
-                            del st.session_state["edit_client_id"]
-                            st.rerun()
-                    with col_delete:
-                        if st.form_submit_button("🗑️ Удалить", use_container_width=True, type="secondary"):
-                            run_query("DELETE FROM clients WHERE id=?", (selected_id,))
-                            st.success("🗑️ Клиент удалён!")
-                            del st.session_state["edit_client_id"]
-                            st.rerun()
-                    with col_cancel:
-                        if st.form_submit_button("❌ Отмена", use_container_width=True):
-                            del st.session_state["edit_client_id"]
-                            st.rerun()
+                    run_query('''
+                        UPDATE clients 
+                        SET name=?, sex=?, phone=?, vk_id=?, tg_id=?, group_id=?, first_order_date=?
+                        WHERE id=?
+                    ''', (
+                        new_row['name'],
+                        new_row['sex'],
+                        new_row['phone'],
+                        new_row['vk_id'],
+                        new_row['tg_id'],
+                        g_id,
+                        first_order,
+                        client_id
+                    ))
+            st.success("✅ Изменения сохранены!")
+            st.rerun()
     else:
         st.info("Клиенты не найдены")
 
@@ -407,67 +434,51 @@ elif choice == "Прайс-лист Услуг":
     services_df = run_query("SELECT * FROM services_catalog", fetch=True)
     
     if not services_df.empty:
-        st.markdown("### Список услуг")
+        # Форматируем цену для отображения
+        display_services = services_df.copy()
+        display_services['min_price'] = display_services['min_price'].apply(lambda x: f"{format_currency(x)} ₽")
         
-        # Заголовки
-        header_cols = st.columns([0.5, 0.5, 2, 1.2, 3])
-        headers = ["", "ID", "Услуга", "Мин. прайс", "Описание"]
-        for col, header in zip(header_cols, headers):
-            with col:
-                st.caption(header)
+        # Переименовываем колонки
+        display_services.columns = ['ID', 'Услуга', 'Мин. прайс', 'Описание']
         
-        # Строки таблицы
-        for idx, row in services_df.iterrows():
-            cols = st.columns([0.5, 0.5, 2, 1.2, 3])
-            
-            with cols[0]:
-                if st.button("✏️", key=f"edit_service_{row['id']}", help="Редактировать"):
-                    st.session_state["edit_service_id"] = row['id']
-            with cols[1]:
-                st.write(f"**{row['id']}**")
-            with cols[2]:
-                st.write(row['name'])
-            with cols[3]:
-                st.write(f"{format_currency(row['min_price'])} ₽")
-            with cols[4]:
-                st.write(row['description'] or "")
+        st.dataframe(display_services, use_container_width=True, hide_index=True)
         
-        # Форма редактирования услуги
-        if "edit_service_id" in st.session_state:
-            selected_id = st.session_state["edit_service_id"]
-            service_row = services_df[services_df['id'] == selected_id]
-            
-            if not service_row.empty:
-                service_row = service_row.iloc[0]
-                st.markdown("---")
-                st.markdown(f"### ✏️ Редактирование услуги #{selected_id}")
+        # Редактирование через data_editor
+        st.markdown("### ✏️ Редактирование услуг")
+        st.info("Дважды кликните по ячейке для редактирования. Изменения сохранятся автоматически.")
+        
+        # Для data_editor используем сырые данные
+        edited_services = st.data_editor(
+            services_df,
+            column_config={
+                "id": st.column_config.NumberColumn("ID", disabled=True),
+                "name": st.column_config.TextColumn("Услуга"),
+                "min_price": st.column_config.NumberColumn("Мин. прайс ₽", format="%.0f"),
+                "description": st.column_config.TextColumn("Описание")
+            },
+            hide_index=True,
+            use_container_width=True,
+            key="services_editor"
+        )
+        
+        if not edited_services.equals(services_df):
+            for idx in range(len(edited_services)):
+                orig_row = services_df.iloc[idx]
+                new_row = edited_services.iloc[idx]
                 
-                with st.form("edit_service_form"):
-                    edit_name = st.text_input("Наименование", value=service_row['name'])
-                    edit_price = st.text_input("Мин. прайс ₽", value=format_currency(service_row['min_price']))
-                    edit_desc = st.text_area("Описание", value=service_row['description'] or "")
-                    
-                    col_save, col_delete, col_cancel = st.columns(3)
-                    with col_save:
-                        if st.form_submit_button("💾 Сохранить", use_container_width=True):
-                            run_query('''
-                                UPDATE services_catalog 
-                                SET name=?, min_price=?, description=?
-                                WHERE id=?
-                            ''', (edit_name, parse_currency(edit_price), edit_desc, selected_id))
-                            st.success("✅ Услуга обновлена!")
-                            del st.session_state["edit_service_id"]
-                            st.rerun()
-                    with col_delete:
-                        if st.form_submit_button("🗑️ Удалить", use_container_width=True, type="secondary"):
-                            run_query("DELETE FROM services_catalog WHERE id=?", (selected_id,))
-                            st.success("🗑️ Услуга удалена!")
-                            del st.session_state["edit_service_id"]
-                            st.rerun()
-                    with col_cancel:
-                        if st.form_submit_button("❌ Отмена", use_container_width=True):
-                            del st.session_state["edit_service_id"]
-                            st.rerun()
+                if not orig_row.equals(new_row):
+                    run_query('''
+                        UPDATE services_catalog 
+                        SET name=?, min_price=?, description=?
+                        WHERE id=?
+                    ''', (
+                        new_row['name'],
+                        new_row['min_price'],
+                        new_row['description'],
+                        int(new_row['id'])
+                    ))
+            st.success("✅ Изменения сохранены!")
+            st.rerun()
     else:
         st.info("Услуги еще не добавлены")
 
@@ -566,85 +577,67 @@ elif choice == "Заказы":
             in_work = len(orders_df[orders_df['status'] == 'В работе'])
             st.metric("В работе", in_work)
 
-        st.markdown("### Список заказов")
+        # Таблица заказов для отображения
+        display_orders = orders_df[['id', 'client_name', 'execution_date', 'status', 'total_amount']].copy()
+        display_orders['execution_date'] = display_orders['execution_date'].apply(format_date_display)
+        display_orders['total_amount'] = display_orders['total_amount'].apply(lambda x: f"{format_currency(x)} ₽")
+        display_orders.columns = ['ID', 'Клиент', 'Дата исполнения', 'Статус', 'Сумма']
         
-        # Заголовки
-        header_cols = st.columns([0.5, 0.5, 2, 1.2, 1.2, 1.2])
-        headers = ["", "ID", "Клиент", "Дата", "Статус", "Сумма"]
-        for col, header in zip(header_cols, headers):
-            with col:
-                st.caption(header)
+        st.dataframe(display_orders, use_container_width=True, hide_index=True)
         
-        # Строки таблицы
-        for idx, row in orders_df.iterrows():
-            cols = st.columns([0.5, 0.5, 2, 1.2, 1.2, 1.2])
-            
-            with cols[0]:
-                if st.button("✏️", key=f"edit_order_{row['id']}", help="Редактировать"):
-                    st.session_state["edit_order_id"] = row['id']
-            with cols[1]:
-                st.write(f"**{row['id']}**")
-            with cols[2]:
-                st.write(row['client_name'])
-            with cols[3]:
-                st.write(format_date_display(row['execution_date']))
-            with cols[4]:
-                st.write(row['status'])
-            with cols[5]:
-                st.write(f"{format_currency(row['total_amount'])} ₽")
+        # Редактирование через data_editor
+        st.markdown("### ✏️ Редактирование заказов")
+        st.info("Дважды кликните по ячейке для редактирования. Изменения сохранятся автоматически.")
         
-        # Форма редактирования заказа
-        if "edit_order_id" in st.session_state:
-            selected_id = st.session_state["edit_order_id"]
-            order_row = orders_df[orders_df['id'] == selected_id]
-            
-            if not order_row.empty:
-                order_row = order_row.iloc[0]
-                st.markdown("---")
-                st.markdown(f"### ✏️ Редактирование заказа #{selected_id}")
+        # Подготовка данных для data_editor
+        editor_df = orders_df[['id', 'client_id', 'client_name', 'execution_date', 'status', 'total_amount']].copy()
+        editor_df['execution_date'] = editor_df['execution_date'].apply(format_date_display)
+        
+        # Добавляем колонку для отображения
+        editor_df['total_display'] = editor_df['total_amount'].apply(lambda x: f"{format_currency(x)} ₽")
+        
+        edited_orders = st.data_editor(
+            editor_df,
+            column_config={
+                "id": st.column_config.NumberColumn("ID", disabled=True),
+                "client_name": st.column_config.SelectboxColumn(
+                    "Клиент",
+                    options=client_names,
+                    required=True
+                ),
+                "execution_date": st.column_config.TextColumn("Дата исполнения"),
+                "status": st.column_config.SelectboxColumn(
+                    "Статус",
+                    options=STATUS_LIST,
+                    required=True
+                ),
+                "total_amount": st.column_config.TextColumn("Сумма", disabled=True),
+                "total_display": st.column_config.TextColumn("Сумма", disabled=True)
+            },
+            hide_index=True,
+            use_container_width=True,
+            key="orders_editor"
+        )
+
+        # Сохранение изменений
+        if not edited_orders.equals(editor_df):
+            for idx in range(len(edited_orders)):
+                orig_row = editor_df.iloc[idx]
+                new_row = edited_orders.iloc[idx]
                 
-                with st.form("edit_order_form"):
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        edit_client = st.selectbox(
-                            "Клиент",
-                            client_names,
-                            index=client_names.index(order_row['client_name']) if order_row['client_name'] in client_names else 0
-                        )
-                    with col2:
-                        edit_date = st.date_input(
-                            "Дата исполнения",
-                            value=datetime.strptime(order_row['execution_date'], "%Y-%m-%d").date()
-                        )
-                    with col3:
-                        edit_status = st.selectbox(
-                            "Статус",
-                            STATUS_LIST,
-                            index=STATUS_LIST.index(order_row['status']) if order_row['status'] in STATUS_LIST else 0
-                        )
+                if not orig_row.equals(new_row):
+                    order_id = int(new_row['id'])
+                    client_id = client_map.get(new_row['client_name'])
+                    exec_date = parse_date_to_db(new_row['execution_date'])
                     
-                    col_save, col_delete, col_cancel = st.columns(3)
-                    with col_save:
-                        if st.form_submit_button("💾 Сохранить", use_container_width=True):
-                            client_id = client_map.get(edit_client)
-                            run_query('''
-                                UPDATE orders 
-                                SET client_id=?, execution_date=?, status=?
-                                WHERE id=?
-                            ''', (client_id, edit_date.strftime("%Y-%m-%d"), edit_status, selected_id))
-                            st.success("✅ Заказ обновлён!")
-                            del st.session_state["edit_order_id"]
-                            st.rerun()
-                    with col_delete:
-                        if st.form_submit_button("🗑️ Удалить", use_container_width=True, type="secondary"):
-                            run_query("DELETE FROM orders WHERE id=?", (selected_id,))
-                            st.success("🗑️ Заказ удалён!")
-                            del st.session_state["edit_order_id"]
-                            st.rerun()
-                    with col_cancel:
-                        if st.form_submit_button("❌ Отмена", use_container_width=True):
-                            del st.session_state["edit_order_id"]
-                            st.rerun()
+                    run_query('''
+                        UPDATE orders 
+                        SET client_id=?, execution_date=?, status=?
+                        WHERE id=?
+                    ''', (client_id, exec_date, new_row['status'], order_id))
+            
+            st.success("✅ Изменения сохранены!")
+            st.rerun()
     else:
         st.info("Заказы не найдены")
 
@@ -665,7 +658,7 @@ elif choice == "Детализация Заказа":
         order_selection = st.selectbox("Выберите заказ", orders_df['label'])
         order_id = int(orders_df[orders_df['label'] == order_selection]['id'].iloc[0])
         
-        # Получаем client_id
+        # Получаем client_id для обновления first_order_date
         client_id_result = run_query("SELECT client_id FROM orders WHERE id=?", (order_id,), fetch=True)
         current_client_id = client_id_result['client_id'].iloc[0] if not client_id_result.empty else None
 
@@ -673,23 +666,25 @@ elif choice == "Детализация Заказа":
         services_cat = run_query("SELECT name FROM services_catalog", fetch=True)
         srv_list = services_cat['name'].tolist() if not services_cat.empty else []
         
-        col1, col2 = st.columns([1, 2])
+        col1, col2 = st.columns(2)
         
         with col1:
             st.markdown("#### ➕ Добавить услугу")
             with st.form("add_item_form"):
-                service_choice = st.selectbox("Услуга", srv_list if srv_list else ["Нет услуг"])
+                service_choice = st.selectbox("Услуга", srv_list if srv_list else ["Нет услуг в каталоге"])
                 i_date = st.date_input("Дата оплаты", value=date.today())
-                amount_str = st.text_input("Сумма ₽", value="0", placeholder="10 000")
-                i_hours = st.text_input("Кол-во часов", value="0", placeholder="1.5")
                 
-                if st.form_submit_button("Добавить"):
-                    i_amount = parse_currency(amount_str)
-                    try:
-                        i_hours_val = float(i_hours.replace(",", ".")) if i_hours else 0.0
-                    except:
-                        i_hours_val = 0.0
-                    
+                # Поле суммы с форматированием
+                amount_str = st.text_input("Сумма ₽", value="0", placeholder="10 000")
+                i_amount = parse_currency(amount_str)
+                
+                i_hours = st.text_input("Кол-во часов", value="0", placeholder="1.5")
+                try:
+                    i_hours_val = float(i_hours.replace(",", ".")) if i_hours else 0.0
+                except:
+                    i_hours_val = 0.0
+                
+                if st.form_submit_button("Добавить услугу"):
                     if service_choice and i_amount > 0:
                         run_query(
                             '''INSERT INTO order_items 
@@ -697,20 +692,23 @@ elif choice == "Детализация Заказа":
                             VALUES (?,?,?,?,?)''',
                             (order_id, service_choice, i_date.strftime("%Y-%m-%d"), i_amount, i_hours_val)
                         )
+                        # Обновляем сумму заказа
                         total_res = run_query(
                             "SELECT SUM(amount) as total FROM order_items WHERE order_id=?",
-                            (order_id,), fetch=True
+                            (order_id,),
+                            fetch=True
                         )
                         total = total_res['total'].iloc[0] if not total_res.empty and total_res['total'].iloc[0] else 0.0
                         run_query("UPDATE orders SET total_amount=? WHERE id=?", (total, order_id))
                         
+                        # Обновляем first_order_date клиента
                         if current_client_id:
                             update_client_first_order_date(current_client_id)
                         
                         st.success("✅ Услуга добавлена!")
                         st.rerun()
                     else:
-                        st.error("Заполните все поля")
+                        st.error("Заполните все поля корректно")
 
         with col2:
             st.markdown(f"#### 📋 Состав заказа #{order_id}")
@@ -718,119 +716,87 @@ elif choice == "Детализация Заказа":
             items_df = run_query(
                 '''SELECT id, service_name, payment_date, amount, hours 
                    FROM order_items WHERE order_id=?''',
-                (order_id,), fetch=True
+                (order_id,),
+                fetch=True
             )
             
             if not items_df.empty:
-                # Заголовки
-                header_cols = st.columns([0.5, 0.5, 2, 1.2, 1.2, 0.8])
-                headers = ["", "ID", "Услуга", "Дата", "Сумма", "Часы"]
-                for col, header in zip(header_cols, headers):
-                    with col:
-                        st.caption(header)
+                # Форматируем для отображения
+                display_items = items_df.copy()
+                display_items['payment_date'] = display_items['payment_date'].apply(format_date_display)
+                display_items['amount'] = display_items['amount'].apply(lambda x: f"{format_currency(x)} ₽")
+                display_items['hours'] = display_items['hours'].apply(lambda x: f"{float(x):.1f}" if pd.notna(x) else "0.0")
+                display_items.columns = ['ID', 'Услуга', 'Дата оплаты', 'Сумма', 'Часы']
                 
-                # Строки таблицы
-                for idx, row in items_df.iterrows():
-                    cols = st.columns([0.5, 0.5, 2, 1.2, 1.2, 0.8])
-                    
-                    with cols[0]:
-                        if st.button("✏️", key=f"edit_item_{row['id']}", help="Редактировать"):
-                            st.session_state["edit_item_id"] = row['id']
-                    with cols[1]:
-                        st.write(f"**{row['id']}**")
-                    with cols[2]:
-                        st.write(row['service_name'])
-                    with cols[3]:
-                        st.write(format_date_display(row['payment_date']))
-                    with cols[4]:
-                        st.write(f"{format_currency(row['amount'])} ₽")
-                    with cols[5]:
-                        st.write(f"{float(row['hours']):.1f}" if row['hours'] else "0")
+                st.dataframe(display_items, use_container_width=True, hide_index=True)
 
                 # Итого
                 total_amount = items_df['amount'].sum()
                 st.success(f"💰 **Итого:** {format_currency(total_amount)} ₽")
                 
-                # Форма редактирования услуги
-                if "edit_item_id" in st.session_state:
-                    selected_id = st.session_state["edit_item_id"]
-                    item_row = items_df[items_df['id'] == selected_id]
-                    
-                    if not item_row.empty:
-                        item_row = item_row.iloc[0]
-                        st.markdown("---")
-                        st.markdown(f"### ✏️ Редактирование услуги #{selected_id}")
+                # Редактирование через data_editor
+                st.markdown("---")
+                st.markdown("#### ✏️ Редактирование услуг")
+                st.info("Дважды кликните по ячейке для редактирования. Изменения сохранятся автоматически.")
+                
+                # Для data_editor используем сырые данные
+                edited_items = st.data_editor(
+                    items_df,
+                    column_config={
+                        "id": st.column_config.NumberColumn("ID", disabled=True),
+                        "service_name": st.column_config.SelectboxColumn(
+                            "Услуга",
+                            options=srv_list,
+                            required=True
+                        ),
+                        "payment_date": st.column_config.TextColumn("Дата оплаты"),
+                        "amount": st.column_config.NumberColumn("Сумма", format="%.0f"),
+                        "hours": st.column_config.NumberColumn("Часы", format="%.1f", step=0.1)
+                    },
+                    hide_index=True,
+                    use_container_width=True,
+                    key="items_editor"
+                )
+
+                # Сохранение изменений
+                if not edited_items.equals(items_df):
+                    for idx in range(len(edited_items)):
+                        orig_row = items_df.iloc[idx]
+                        new_row = edited_items.iloc[idx]
                         
-                        with st.form("edit_item_form"):
-                            col_a, col_b = st.columns(2)
-                            with col_a:
-                                edit_service = st.selectbox(
-                                    "Услуга",
-                                    srv_list,
-                                    index=srv_list.index(item_row['service_name']) if item_row['service_name'] in srv_list else 0
-                                )
-                                edit_date = st.date_input(
-                                    "Дата оплаты",
-                                    value=datetime.strptime(item_row['payment_date'], "%Y-%m-%d").date() if item_row['payment_date'] else date.today()
-                                )
-                            with col_b:
-                                edit_amount = st.text_input("Сумма ₽", value=format_currency(item_row['amount']))
-                                edit_hours = st.text_input("Часы", value=f"{float(item_row['hours']):.1f}" if item_row['hours'] else "0")
+                        if not orig_row.equals(new_row):
+                            item_id = int(new_row['id'])
+                            payment_date_val = parse_date_to_db(new_row['payment_date'])
+                            amount_val = float(new_row['amount'])
+                            hours_val = float(new_row['hours'])
                             
-                            col_save, col_delete, col_cancel = st.columns(3)
-                            with col_save:
-                                if st.form_submit_button("💾 Сохранить", use_container_width=True):
-                                    try:
-                                        hours_val = float(edit_hours.replace(",", "."))
-                                    except:
-                                        hours_val = 0.0
-                                    
-                                    run_query('''
-                                        UPDATE order_items 
-                                        SET service_name=?, payment_date=?, amount=?, hours=?
-                                        WHERE id=?
-                                    ''', (
-                                        edit_service,
-                                        edit_date.strftime("%Y-%m-%d"),
-                                        parse_currency(edit_amount),
-                                        hours_val,
-                                        selected_id
-                                    ))
-                                    
-                                    total_res = run_query(
-                                        "SELECT SUM(amount) as total FROM order_items WHERE order_id=?",
-                                        (order_id,), fetch=True
-                                    )
-                                    total = total_res['total'].iloc[0] if not total_res.empty and total_res['total'].iloc[0] else 0.0
-                                    run_query("UPDATE orders SET total_amount=? WHERE id=?", (total, order_id))
-                                    
-                                    if current_client_id:
-                                        update_client_first_order_date(current_client_id)
-                                    
-                                    st.success("✅ Услуга обновлена!")
-                                    del st.session_state["edit_item_id"]
-                                    st.rerun()
-                            with col_delete:
-                                if st.form_submit_button("🗑️ Удалить", use_container_width=True, type="secondary"):
-                                    run_query("DELETE FROM order_items WHERE id=?", (selected_id,))
-                                    
-                                    total_res = run_query(
-                                        "SELECT SUM(amount) as total FROM order_items WHERE order_id=?",
-                                        (order_id,), fetch=True
-                                    )
-                                    total = total_res['total'].iloc[0] if not total_res.empty and total_res['total'].iloc[0] else 0.0
-                                    run_query("UPDATE orders SET total_amount=? WHERE id=?", (total, order_id))
-                                    
-                                    if current_client_id:
-                                        update_client_first_order_date(current_client_id)
-                                    
-                                    st.success("🗑️ Услуга удалена!")
-                                    del st.session_state["edit_item_id"]
-                                    st.rerun()
-                            with col_cancel:
-                                if st.form_submit_button("❌ Отмена", use_container_width=True):
-                                    del st.session_state["edit_item_id"]
-                                    st.rerun()
+                            run_query('''
+                                UPDATE order_items 
+                                SET service_name=?, payment_date=?, amount=?, hours=?
+                                WHERE id=?
+                            ''', (
+                                new_row['service_name'],
+                                payment_date_val,
+                                amount_val,
+                                hours_val,
+                                item_id
+                            ))
+                    
+                    # Обновляем сумму заказа
+                    total_res = run_query(
+                        "SELECT SUM(amount) as total FROM order_items WHERE order_id=?",
+                        (order_id,),
+                        fetch=True
+                    )
+                    total = total_res['total'].iloc[0] if not total_res.empty and total_res['total'].iloc[0] else 0.0
+                    run_query("UPDATE orders SET total_amount=? WHERE id=?", (total, order_id))
+                    
+                    # Обновляем first_order_date клиента
+                    if current_client_id:
+                        update_client_first_order_date(current_client_id)
+                    
+                    st.success("✅ Изменения сохранены!")
+                    st.rerun()
             else:
                 st.info("В этом заказе пока нет услуг")
     else:
@@ -840,6 +806,7 @@ elif choice == "Детализация Заказа":
 elif choice == "ОТЧЁТЫ":
     st.header("📊 Аналитические Отчёты")
     
+    # Основной запрос — по дате оплаты!
     main_query = '''
     SELECT 
         oi.id as item_id,
@@ -866,104 +833,125 @@ elif choice == "ОТЧЁТЫ":
         df['payment_date'] = pd.to_datetime(df['payment_date'])
         df['year'] = df['payment_date'].dt.year
         df['month'] = df['payment_date'].dt.month
+        df['month_name'] = df['payment_date'].dt.strftime('%B')
 
         years = sorted(df['year'].unique())
         
-        # Отчет 1
+        # Отчет 1: Оплаты за год по группам
         st.subheader("1. Оплаты за год по группам")
         sel_year_1 = st.selectbox("Выберите год", years, index=len(years)-1, key='y1')
         
         df_1 = df[df['year'] == sel_year_1].groupby('group_name').agg(
-            Количество=('item_id', 'count'),
+            Количество_оплат=('item_id', 'count'),
             Сумма=('amount', 'sum'),
-            Средняя=('amount', 'mean')
+            Средняя_оплата=('amount', 'mean')
         ).reset_index()
         df_1['Сумма'] = df_1['Сумма'].apply(lambda x: f"{format_currency(x)} ₽")
-        df_1['Средняя'] = df_1['Средняя'].apply(lambda x: f"{format_currency(x)} ₽")
-        df_1.columns = ['Группа', 'Кол-во', 'Сумма', 'Средняя']
+        df_1['Средняя_оплата'] = df_1['Средняя_оплата'].apply(lambda x: f"{format_currency(x)} ₽")
+        df_1.columns = ['Группа', 'Кол-во оплат', 'Сумма', 'Средняя оплата']
         st.dataframe(df_1, use_container_width=True, hide_index=True)
 
-        # Отчет 2
+        # Отчет 2: Оплаты за год по клиентам
         st.subheader("2. Оплаты за год по клиентам")
         sel_year_2 = st.selectbox("Выберите год", years, index=len(years)-1, key='y2')
         
         df_2 = df[df['year'] == sel_year_2].groupby('client_name').agg(
-            Количество=('item_id', 'count'),
+            Количество_оплат=('item_id', 'count'),
             Сумма=('amount', 'sum')
         ).reset_index().sort_values(by='Сумма', ascending=False)
         df_2['Сумма'] = df_2['Сумма'].apply(lambda x: f"{format_currency(x)} ₽")
-        df_2.columns = ['Клиент', 'Кол-во', 'Сумма']
+        df_2.columns = ['Клиент', 'Кол-во оплат', 'Сумма']
         st.dataframe(df_2, use_container_width=True, hide_index=True)
 
-        # Отчет 3
+        # Отчет 3: Новые клиенты за год (по первой оплате)
         st.subheader("3. Новые клиенты за год")
         sel_year_3 = st.selectbox("Выберите год", years, index=len(years)-1, key='y3')
         
-        df_new = run_query('''
-            SELECT c.name, c.first_order_date, COUNT(oi.id) as cnt, SUM(oi.amount) as total
+        df_new_clients = run_query('''
+            SELECT 
+                c.name, 
+                c.first_order_date,
+                COUNT(oi.id) as payments_count, 
+                SUM(oi.amount) as total_sum
             FROM clients c 
             JOIN orders o ON c.id = o.client_id
             JOIN order_items oi ON o.id = oi.order_id
             WHERE strftime('%Y', c.first_order_date) = ?
-            GROUP BY c.id ORDER BY total DESC
+            GROUP BY c.id
+            ORDER BY total_sum DESC
         ''', (str(sel_year_3),), fetch=True)
         
-        if not df_new.empty:
-            df_new['first_order_date'] = df_new['first_order_date'].apply(format_date_display)
-            df_new['total'] = df_new['total'].apply(lambda x: f"{format_currency(x)} ₽")
-            df_new.columns = ['Клиент', 'Первая оплата', 'Кол-во', 'Сумма']
-            st.dataframe(df_new, use_container_width=True, hide_index=True)
+        if not df_new_clients.empty:
+            df_new_clients['first_order_date'] = df_new_clients['first_order_date'].apply(format_date_display)
+            df_new_clients['total_sum'] = df_new_clients['total_sum'].apply(lambda x: f"{format_currency(x)} ₽")
+            df_new_clients.columns = ['Клиент', 'Первая оплата', 'Кол-во оплат', 'Сумма']
+            st.dataframe(df_new_clients, use_container_width=True, hide_index=True)
         else:
-            st.info("Нет новых клиентов")
+            st.info("Нет новых клиентов за этот год")
 
-        # Отчет 4
+        # Отчет 4: Сводка по годам
         st.subheader("4. Сводка по годам")
         df_4 = df.groupby('year').agg(
-            Количество=('item_id', 'count'),
-            Сумма=('amount', 'sum'),
-            Средняя=('amount', 'mean')
+            Количество_оплат=('item_id', 'count'),
+            Макс_оплата=('amount', 'max'),
+            Мин_оплата=('amount', 'min'),
+            Средняя_оплата=('amount', 'mean'),
+            Сумма_год=('amount', 'sum')
         ).reset_index()
-        df_4_chart = df_4[['year', 'Сумма']].copy()
-        df_4['Сумма'] = df_4['Сумма'].apply(lambda x: f"{format_currency(x)} ₽")
-        df_4['Средняя'] = df_4['Средняя'].apply(lambda x: f"{format_currency(x)} ₽")
-        df_4.columns = ['Год', 'Кол-во', 'Сумма', 'Средняя']
+        df_4['Средний_месячный'] = df_4['Сумма_год'] / 12
+        
+        # Копия для графика
+        df_4_chart = df_4[['year', 'Сумма_год']].copy()
+        
+        df_4['Макс_оплата'] = df_4['Макс_оплата'].apply(lambda x: f"{format_currency(x)} ₽")
+        df_4['Мин_оплата'] = df_4['Мин_оплата'].apply(lambda x: f"{format_currency(x)} ₽")
+        df_4['Средняя_оплата'] = df_4['Средняя_оплата'].apply(lambda x: f"{format_currency(x)} ₽")
+        df_4['Сумма_год'] = df_4['Сумма_год'].apply(lambda x: f"{format_currency(x)} ₽")
+        df_4['Средний_месячный'] = df_4['Средний_месячный'].apply(lambda x: f"{format_currency(x)} ₽")
+        df_4.columns = ['Год', 'Кол-во оплат', 'Макс', 'Мин', 'Средняя', 'Сумма за год', 'Средний мес.']
         st.dataframe(df_4, use_container_width=True, hide_index=True)
+        
         st.bar_chart(df_4_chart.set_index('year'))
 
-        # Отчет 5
-        st.subheader("5. Оплаты за месяц")
+        # Отчет 5: Оплаты за месяц
+        st.subheader("5. Оплаты за месяц (детализация)")
         c1, c2 = st.columns(2)
-        with c1:
+        with c1: 
             sel_year_5 = st.selectbox("Год", years, index=len(years)-1, key='y5')
-        with c2:
-            sel_month_5 = st.selectbox("Месяц", range(1, 13), index=date.today().month-1, key='m5')
+        with c2: 
+            sel_month_5 = st.selectbox("Месяц", range(1,13), index=date.today().month-1, key='m5')
         
         df_5 = df[(df['year'] == sel_year_5) & (df['month'] == sel_month_5)]
         df_5_res = df_5.groupby('client_name').agg(
-            Количество=('item_id', 'count'),
+            Количество_оплат=('item_id', 'count'),
             Сумма=('amount', 'sum')
         ).reset_index().sort_values(by='Сумма', ascending=False)
         df_5_res['Сумма'] = df_5_res['Сумма'].apply(lambda x: f"{format_currency(x)} ₽")
-        df_5_res.columns = ['Клиент', 'Кол-во', 'Сумма']
+        df_5_res.columns = ['Клиент', 'Кол-во оплат', 'Сумма']
         st.dataframe(df_5_res, use_container_width=True, hide_index=True)
 
-        # Отчет 6
+        # Отчет 6: Динамика по месяцам
         st.subheader("6. Динамика по месяцам")
         sel_year_6 = st.selectbox("Выберите год", years, index=len(years)-1, key='y6')
         df_6 = df[df['year'] == sel_year_6].groupby('month').agg(
-            Количество=('item_id', 'count'),
+            Количество_оплат=('item_id', 'count'),
+            Средняя_оплата=('amount', 'mean'),
             Сумма=('amount', 'sum')
         ).reset_index()
+        
         df_6_chart = df_6[['month', 'Сумма']].copy()
+        
+        df_6['Средняя_оплата'] = df_6['Средняя_оплата'].apply(lambda x: f"{format_currency(x)} ₽")
         df_6['Сумма'] = df_6['Сумма'].apply(lambda x: f"{format_currency(x)} ₽")
-        df_6.columns = ['Месяц', 'Кол-во', 'Сумма']
+        df_6.columns = ['Месяц', 'Кол-во оплат', 'Средняя оплата', 'Сумма']
         st.dataframe(df_6, use_container_width=True, hide_index=True)
+        
         st.line_chart(df_6_chart.set_index('month'))
 
-        # Отчет 7
+        # Отчет 7: Оплаты за последнюю неделю
         st.subheader("7. Оплаты за последнюю неделю")
         df_7 = run_query('''
-            SELECT c.name, oi.payment_date, SUM(oi.amount) as total
+            SELECT c.name, oi.payment_date, SUM(oi.amount) as total_amount
             FROM order_items oi
             JOIN orders o ON oi.order_id = o.id
             JOIN clients c ON o.client_id = c.id
@@ -974,10 +962,10 @@ elif choice == "ОТЧЁТЫ":
         
         if not df_7.empty:
             df_7['payment_date'] = df_7['payment_date'].apply(format_date_display)
-            df_7['total'] = df_7['total'].apply(lambda x: f"{format_currency(x)} ₽")
-            df_7.columns = ['Клиент', 'Дата', 'Сумма']
+            df_7['total_amount'] = df_7['total_amount'].apply(lambda x: f"{format_currency(x)} ₽")
+            df_7.columns = ['Клиент', 'Дата оплаты', 'Сумма']
             st.dataframe(df_7, use_container_width=True, hide_index=True)
         else:
-            st.info("Нет оплат за неделю")
+            st.info("Нет оплат за последнюю неделю")
     else:
-        st.warning("Нет данных для отчётов")
+        st.warning("В базе данных пока нет оплат для формирования отчётов.")
