@@ -36,17 +36,14 @@ def paginate_with_arrows(df, items_per_page=15, page_key="page"):
     total_items = len(df)
     total_pages = (total_items + items_per_page - 1) // items_per_page
     
-    # Если страница одна, просто возвращаем данные
     if total_pages <= 1:
         return df, 1, 1
     
-    # Получаем текущую страницу из сессии
     if page_key not in st.session_state:
         st.session_state[page_key] = 1
     
     current_page = st.session_state[page_key]
     
-    # Кнопки навигации
     col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
     with col1:
         if st.button("⬅️ Назад", disabled=(current_page <= 1), use_container_width=True):
@@ -55,13 +52,12 @@ def paginate_with_arrows(df, items_per_page=15, page_key="page"):
     with col2:
         st.write(f"Страница {current_page} из {total_pages}")
     with col3:
-        if st.button("Вперёд ➡️", disabled=(current_page >= total_pages), use_container_width=True):
+        if st.button("Вперёд  ➡️", disabled=(current_page >= total_pages), use_container_width=True):
             st.session_state[page_key] = min(total_pages, current_page + 1)
             st.rerun()
     with col4:
         st.write(f"Записей: {total_items}")
     
-    # Вычисляем срез данных
     start_idx = (current_page - 1) * items_per_page
     end_idx = start_idx + items_per_page
     page_df = df.iloc[start_idx:end_idx]
@@ -154,7 +150,6 @@ if choice == "Клиенты и Группы":
             c_vk = st.text_input("VK ID")
             c_tg = st.text_input("Telegram ID")
             
-            # Получаем список групп для выбора
             groups_df = run_query("SELECT id, name FROM groups", fetch=True)
             if not groups_df.empty:
                 group_options = groups_df['name'].tolist()
@@ -174,33 +169,52 @@ if choice == "Клиенты и Группы":
                 else:
                     st.error("Введите имя клиента")
 
-    # Кнопка для открытия модального окна с группами
-    if st.button("⚙️ Управление группами клиентов"):
-        st.session_state.show_groups = True
-    
-    # Модальное окно с группами
-    if st.session_state.get("show_groups", False):
-        with st.expander("⚙️ Группы клиентов", expanded=True):
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                with st.form("add_group"):
-                    new_group = st.text_input("Название группы")
-                    if st.form_submit_button("Добавить группу"):
-                        if new_group:
-                            run_query("INSERT INTO groups (name) VALUES (?)", (new_group,))
-                            st.success("Группа добавлена")
-                            st.rerun()
-            with col2:
-                st.write("Список групп:")
-                groups_df = run_query("SELECT * FROM groups", fetch=True)
-                if not groups_df.empty:
-                    st.dataframe(groups_df, hide_index=True)
-                else:
-                    st.info("Групп пока нет")
-            
-            if st.button("Закрыть"):
-                st.session_state.show_groups = False
-                st.rerun()
+    # Экспандер групп клиентов (всегда виден, но свернут по умолчанию)
+    with st.expander("⚙️ Группы клиентов", expanded=False):
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            with st.form("add_group"):
+                new_group = st.text_input("Название группы")
+                if st.form_submit_button("Добавить группу"):
+                    if new_group:
+                        run_query("INSERT INTO groups (name) VALUES (?)", (new_group,))
+                        st.success("Группа добавлена")
+                        st.rerun()
+        with col2:
+            st.write("Список групп:")
+            groups_df = run_query("SELECT * FROM groups", fetch=True)
+            if not groups_df.empty:
+                # Добавляем возможность управления группами
+                for idx, row in groups_df.iterrows():
+                    col_a, col_b, col_c = st.columns([3, 1, 1])
+                    with col_a:
+                        new_name = st.text_input(
+                            f"Название", 
+                            value=row['name'], 
+                            key=f"group_name_{row['id']}"
+                        )
+                    with col_b:
+                        if st.button("Обновить", key=f"update_{row['id']}"):
+                            if new_name != row['name']:
+                                run_query("UPDATE groups SET name=? WHERE id=?", (new_name, row['id']))
+                                st.success(f"Группа обновлена: {new_name}")
+                                st.rerun()
+                    with col_c:
+                        if st.button("Удалить", key=f"delete_{row['id']}"):
+                            # Проверка наличия клиентов в группе
+                            clients_check = run_query(
+                                "SELECT COUNT(*) as count FROM clients WHERE group_id=?", 
+                                (row['id'],), 
+                                fetch=True
+                            )
+                            if clients_check['count'].iloc[0] > 0:
+                                st.warning(f"Нельзя удалить группу с {clients_check['count'].iloc[0]} клиентами!")
+                            else:
+                                run_query("DELETE FROM groups WHERE id=?", (row['id'],))
+                                st.success(f"Группа удалена: {row['name']}")
+                                st.rerun()
+            else:
+                st.info("Групп пока нет")
 
     # Поиск и фильтрация клиентов
     st.markdown("### 🔍 Поиск и фильтрация")
@@ -208,7 +222,6 @@ if choice == "Клиенты и Группы":
     with search_col1:
         search_query = st.text_input("Поиск по имени, телефону, VK или Telegram", placeholder="Введите текст для поиска...")
     with search_col2:
-        # Получаем список групп для фильтра
         groups_df = run_query("SELECT name FROM groups", fetch=True)
         groups_list = groups_df['name'].tolist() if not groups_df.empty else []
         filter_group = st.selectbox("Фильтр по группе", ["Все"] + groups_list)
@@ -234,30 +247,37 @@ if choice == "Клиенты и Группы":
         clients_query += ' AND g.name = ?'
         params.append(filter_group)
     
-    clients_query += ' ORDER BY c.id DESC'
+    # Получаем все данные для глобальной сортировки
+    all_clients_df = run_query(clients_query, tuple(params), fetch=True)
     
-    clients_df = run_query(clients_query, tuple(params), fetch=True)
-    
-    if not clients_df.empty:
+    if not all_clients_df.empty:
         # Применяем форматирование к столбцам
-        clients_df['first_order_date'] = clients_df['first_order_date'].apply(format_date)
+        all_clients_df['first_order_date'] = all_clients_df['first_order_date'].apply(format_date)
         
-        # Отображаем количество найденных
-        st.info(f"Найдено клиентов: {len(clients_df)}")
+        # Сортировка
+        st.markdown("#### Сортировка")
+        sort_col1, sort_col2 = st.columns(2)
+        with sort_col1:
+            sort_by = st.selectbox("Сортировать по", options=all_clients_df.columns, index=0, key="clients_sort_by")
+        with sort_col2:
+            sort_order = st.selectbox("Порядок", options=["По возрастанию", "По убыванию"], key="clients_sort_order")
         
-        # Используем пагинацию с кнопками вперёд/назад
-        page_df, current_page, total_pages = paginate_with_arrows(clients_df, items_per_page=15, page_key="clients_page")
+        # Применяем сортировку ко всем данным
+        ascending = sort_order == "По возрастанию"
+        all_clients_df = all_clients_df.sort_values(by=sort_by, ascending=ascending)
         
-        # Отображаем таблицу
+        st.info(f"Найдено клиентов: {len(all_clients_df)}")
+        
+        # Пагинация после сортировки
+        page_df, current_page, total_pages = paginate_with_arrows(all_clients_df, items_per_page=15, page_key="clients_page")
         st.dataframe(page_df, use_container_width=True)
         
-        # Кнопка для редактирования (Double-Click эмуляция)
+        # Редактирование клиента
         st.markdown("### ✏️ Редактирование записи")
         st.info("Для редактирования записи выберите её ID из таблицы выше")
         edit_id = st.number_input("ID клиента для редактирования", min_value=0, step=1)
         
         if edit_id > 0:
-            # Получаем данные клиента
             client_data = run_query("SELECT * FROM clients WHERE id=?", (edit_id,), fetch=True)
             if not client_data.empty:
                 with st.expander(f"Редактирование клиента #{edit_id}"):
@@ -268,7 +288,6 @@ if choice == "Клиенты и Группы":
                         c_vk = st.text_input("VK ID", value=client_data['vk_id'].iloc[0])
                         c_tg = st.text_input("Telegram ID", value=client_data['tg_id'].iloc[0])
                         
-                        # Группы для выбора
                         groups_df = run_query("SELECT id, name FROM groups", fetch=True)
                         if not groups_df.empty:
                             group_options = groups_df['name'].tolist()
@@ -303,7 +322,6 @@ if choice == "Клиенты и Группы":
 elif choice == "Прайс-лист Услуг":
     st.subheader("Справочник Услуг")
     
-    # Форма добавления услуги (без "Другое")
     with st.expander("➕ Добавить новую услугу"):
         with st.form("add_service"):
             s_name = st.text_input("Наименование услуги")
@@ -320,14 +338,10 @@ elif choice == "Прайс-лист Услуг":
     services_df = run_query("SELECT * FROM services_catalog", fetch=True)
     
     if not services_df.empty:
-        # Форматируем сумму
         services_df['min_price'] = services_df['min_price'].apply(format_currency)
-        
-        # Отображаем таблицу
         st.dataframe(services_df, use_container_width=True)
         
-        # Редактирование услуги
-        st.markdown("### ✏️ Редактирование услуги")
+        st.markdown("###  ✏️ Редактирование услуги")
         edit_id = st.number_input("ID услуги для редактирования", min_value=0, step=1)
         
         if edit_id > 0:
@@ -409,22 +423,51 @@ elif choice == "Заказы":
     elif date_filter == "Сегодня":
         orders_sql += ' AND o.execution_date = date("now")'
     
-    orders_sql += ' ORDER BY o.execution_date DESC'
+    # Получаем все данные для глобальной сортировки
+    all_orders_df = run_query(orders_sql, tuple(params), fetch=True)
     
-    df_orders = run_query(orders_sql, tuple(params), fetch=True)
-    
-    if not df_orders.empty:
+    if not all_orders_df.empty:
         # Форматируем столбцы
-        df_orders['execution_date'] = df_orders['execution_date'].apply(format_date)
-        df_orders['total_amount'] = df_orders['total_amount'].apply(format_currency)
+        all_orders_df['execution_date'] = all_orders_df['execution_date'].apply(format_date)
+        all_orders_df['total_amount'] = all_orders_df['total_amount'].apply(format_currency)
         
-        # Статистика
+        # Сортировка
+        st.markdown("#### Сортировка")
+        sort_col1, sort_col2 = st.columns(2)
+        with sort_col1:
+            sort_by = st.selectbox("Сортировать по", options=all_orders_df.columns, index=0, key="orders_sort_by")
+        with sort_col2:
+            sort_order = st.selectbox("Порядок", options=["По возрастанию", "По убыванию"], key="orders_sort_order")
+        
+        # Применяем сортировку ко всем данным
+        ascending = sort_order == "По возрастанию"
+        all_orders_df = all_orders_df.sort_values(by=sort_by, ascending=ascending)
+        
+        # Статистика за текущий месяц
+        current_month_start = datetime.now().replace(day=1).strftime("%Y-%m-%d")
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        
+        stats_sql = f'''
+        SELECT o.id, o.execution_date, o.total_amount, o.status
+        FROM orders o JOIN clients c ON o.client_id = c.id
+        WHERE o.execution_date >= '{current_month_start}' AND o.execution_date <= '{current_date}'
+        '''
+        stats_params = []
+        
+        if order_search:
+            stats_sql += ' AND LOWER(c.name) LIKE LOWER(?)'
+            stats_params.append(f'%{order_search}%')
+        
+        if status_filter != "Все":
+            stats_sql += ' AND o.status = ?'
+            stats_params.append(status_filter)
+        
+        original_df = run_query(stats_sql, tuple(stats_params), fetch=True)
+        
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Всего заказов", len(df_orders))
+            st.metric("Всего заказов", len(original_df))
         with col2:
-            # Для статистики нужно оригинальные числа
-            original_df = run_query(orders_sql, tuple(params), fetch=True)
             total_sum = original_df['total_amount'].sum()
             st.metric("Общая сумма", f"{int(total_sum):,.0f} ₽".replace(",", " "))
         with col3:
@@ -434,12 +477,12 @@ elif choice == "Заказы":
             in_work = len(original_df[original_df['status'] == 'В работе'])
             st.metric("В работе", in_work)
         
-        # Пагинация с кнопками
-        page_df, current_page, total_pages = paginate_with_arrows(df_orders, items_per_page=15, page_key="orders_page")
+        # Пагинация после сортировки
+        page_df, current_page, total_pages = paginate_with_arrows(all_orders_df, items_per_page=15, page_key="orders_page")
         st.dataframe(page_df, use_container_width=True)
         
         # Редактирование заказа
-        st.markdown("### ✏️ Редактирование заказа")
+        st.markdown("###  ✏️ Редактирование заказа")
         edit_id = st.number_input("ID заказа для редактирования", min_value=0, step=1)
         
         if edit_id > 0:
@@ -447,7 +490,6 @@ elif choice == "Заказы":
             if not order_data.empty:
                 with st.expander(f"Редактирование заказа #{edit_id}"):
                     with st.form("edit_order"):
-                        # Получаем список клиентов для выбора
                         clients_df = run_query("SELECT id, name FROM clients", fetch=True)
                         client_options = clients_df['name'].tolist()
                         client_map = dict(zip(clients_df['name'], clients_df['id']))
@@ -493,14 +535,13 @@ elif choice == "Детализация Заказа":
         with col1:
             st.markdown("#### Добавить услугу")
             with st.form("add_item_form"):
-                # Убираем "Другое", только выбор из каталога
                 service_choice = st.selectbox("Услуга (из каталога)", srv_list)
                 
                 i_date = st.date_input("Дата оплаты", value=date.today())
-                # Убираем значки +/-
-                i_amount = st.number_input("Сумма", min_value=0.0, step=100.0, value=0.0)
-                # Убираем значки +/-
-                i_hours = st.number_input("Кол-во часов", min_value=0.0, step=0.1, value=0.0, format="%.1f")
+                # Убраны значки +/-, изменен шаг
+                i_amount = st.number_input("Сумма", min_value=0.0, step=0.0, value=0.0)
+                # Убраны значки +/-, изменен шаг
+                i_hours = st.number_input("Кол-во часов", min_value=0.0, step=0.0, value=0.0, format="%.1f")
                 
                 submitted = st.form_submit_button("Добавить услугу")
                 if submitted:
@@ -591,7 +632,6 @@ elif choice == "ОТЧЁТЫ":
             Сумма=('total_amount', 'sum'),
             Среднее=('total_amount', 'mean')
         ).reset_index()
-        # Форматируем сумму
         df_1['Сумма'] = df_1['Сумма'].apply(lambda x: f"{int(x):,.0f}".replace(",", " "))
         df_1['Среднее'] = df_1['Среднее'].apply(lambda x: f"{int(x):,.0f}".replace(",", " "))
         st.dataframe(df_1, use_container_width=True)
@@ -604,7 +644,6 @@ elif choice == "ОТЧЁТЫ":
             Количество=('id', 'count'),
             Сумма=('total_amount', 'sum')
         ).reset_index().sort_values(by='Сумма', ascending=False)
-        # Форматируем сумму
         df_2['Сумма'] = df_2['Сумма'].apply(lambda x: f"{int(x):,.0f}".replace(",", " "))
         st.dataframe(df_2, use_container_width=True)
 
@@ -621,7 +660,6 @@ elif choice == "ОТЧЁТЫ":
         ''', (str(sel_year_3),), fetch=True)
         
         if not df_new_clients.empty:
-            # Форматируем дату и сумму
             df_new_clients['first_order_date'] = df_new_clients['first_order_date'].apply(format_date)
             df_new_clients['sum'] = df_new_clients['sum'].apply(lambda x: f"{int(x):,.0f}".replace(",", " "))
             st.dataframe(df_new_clients, use_container_width=True)
@@ -636,7 +674,6 @@ elif choice == "ОТЧЁТЫ":
             Сумма_год=('total_amount', 'sum')
         ).reset_index()
         df_4['Средний_месячный'] = df_4['Сумма_год'] / 12
-        # Форматируем столбцы
         df_4['Макс_сумма'] = df_4['Макс_сумма'].apply(lambda x: f"{int(x):,.0f}".replace(",", " "))
         df_4['Мин_сумма'] = df_4['Мин_сумма'].apply(lambda x: f"{int(x):,.0f}".replace(",", " "))
         df_4['Средний_чек'] = df_4['Средний_чек'].apply(lambda x: f"{int(x):,.0f}".replace(",", " "))
@@ -656,7 +693,6 @@ elif choice == "ОТЧЁТЫ":
             Количество=('id', 'count'),
             Сумма=('total_amount', 'sum')
         ).reset_index()
-        # Форматируем сумму
         df_5_res['Сумма'] = df_5_res['Сумма'].apply(lambda x: f"{int(x):,.0f}".replace(",", " "))
         st.dataframe(df_5_res, use_container_width=True)
 
@@ -668,7 +704,6 @@ elif choice == "ОТЧЁТЫ":
             Средний_чек=('total_amount', 'mean'),
             Сумма=('total_amount', 'sum')
         ).reset_index()
-        # Форматируем столбцы
         df_6['Средний_чек'] = df_6['Средний_чек'].apply(lambda x: f"{int(x):,.0f}".replace(",", " "))
         df_6['Сумма'] = df_6['Сумма'].apply(lambda x: f"{int(x):,.0f}".replace(",", " "))
         st.dataframe(df_6, use_container_width=True)
@@ -677,20 +712,19 @@ elif choice == "ОТЧЁТЫ":
         # Отчет 7: Оплаты за неделю
         st.subheader("7. Оплаты за последнюю неделю")
         df_items = run_query('''
-            SELECT c.name, oi.payment_date, oi.amount 
+            SELECT c.name, oi.payment_date, SUM(oi.amount) as total_amount
             FROM order_items oi
             JOIN orders o ON oi.order_id = o.id
             JOIN clients c ON o.client_id = c.id
+            WHERE oi.payment_date >= date('now','-7 days')
+            GROUP BY c.name, oi.payment_date
+            ORDER BY oi.payment_date DESC
         ''', fetch=True)
         
         if not df_items.empty:
-            df_items['payment_date'] = pd.to_datetime(df_items['payment_date'])
-            week_ago = pd.Timestamp.now() - pd.Timedelta(days=7)
-            df_7 = df_items[df_items['payment_date'] >= week_ago]
-            # Форматируем дату и сумму
-            df_7['payment_date'] = df_7['payment_date'].apply(format_date)
-            df_7['amount'] = df_7['amount'].apply(lambda x: f"{int(x):,.0f}".replace(",", " "))
-            st.dataframe(df_7, use_container_width=True)
+            df_items['payment_date'] = df_items['payment_date'].apply(format_date)
+            df_items['total_amount'] = df_items['total_amount'].apply(lambda x: f"{int(x):,.0f}".replace(",", " "))
+            st.dataframe(df_items, use_container_width=True)
         else:
             st.write("Нет данных об оплатах.")
     else:
