@@ -351,7 +351,8 @@ if choice == "Клиенты и Группы":
                 # ✅ Исправленные кликабельные ссылки
                 "phone_link": st.column_config.LinkColumn(
                     "Телефон",
-                    display_text='phone_display'  # Теперь передаём только название колонки
+                    display_text=":parent",
+                    url="phone_url"
                 ),
                 "vk_link": st.column_config.LinkColumn(
                     "VK",
@@ -369,7 +370,7 @@ if choice == "Клиенты и Группы":
             },
             use_container_width=True,
             hide_index=True
-)
+	)
 
         # --- ВЫБОР КЛИЕНТА ДЛЯ РЕДАКТИРОВАНИЯ ---
         # Формируем список для выбора
