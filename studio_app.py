@@ -28,10 +28,10 @@ def format_vk(vk_str):
         return ""
     vk = str(vk_str).strip()
     vk = vk.replace("https://", "").replace("http://", "")
-    if vk.startswith("vk.com/"):
+    if vk.startswith("vk.com/id"):
         return vk
     if vk.startswith("id") and vk[2:].isdigit():
-        return f"vk.com/{vk}"
+        return f"vk.com/id{vk}"
     if vk.isdigit():
         return f"vk.com/id{vk}"
     return f"vk.com/{vk}"
@@ -60,8 +60,8 @@ def get_vk_link(vk_str):
     """Генерация полной ссылки VK"""
     if not vk_str: return ""
     vk = str(vk_str).strip()
-    vk = vk.replace("https://", "").replace("http://", "").replace("vk.com/", "")
-    return f"https://vk.com/{vk}"
+    vk = vk.replace("https://", "").replace("http://", "").replace("vk.com/id", "")
+    return f"https://vk.com/id{vk}"
 
 def get_telegram_link(tg_str):
     """Генерация полной ссылки Telegram"""
@@ -217,7 +217,7 @@ if choice == "Клиенты и Группы":
     group_map = dict(zip(groups_df['name'], groups_df['id'])) if not groups_df.empty else {}
     
     # Форма добавления клиента
-    with st.expander("➕ Добавить нового клиента", expanded=True):
+    with st.expander("➕ Добавить нового клиента", expanded=False):
         with st.form("add_client"):
             c_name = st.text_input("Имя *", placeholder="Иван Иванов")
             c_sex = st.selectbox("Пол", ["М", "Ж"])
@@ -282,8 +282,6 @@ if choice == "Клиенты и Группы":
                                 st.rerun()
             else:
                 st.info("Групп пока нет")
-
-    st.markdown("---")
     
     # Поиск и фильтрация
     search_col1, search_col2 = st.columns([2, 1])
@@ -326,7 +324,66 @@ if choice == "Клиенты и Группы":
     
     if not clients_df_data.empty:
         st.info(f"Найдено клиентов: {len(clients_df_data)}")
-        
+    
+        # Создаём копию для отображения с форматированием
+        display_df = clients_df_data.copy()
+    
+        # Форматируем все поля
+        display_df['first_order_date'] = display_df['first_order_date'].apply(format_date_display)
+    
+        # Форматируем контакты для отображения и готовим ссылки
+        display_df['phone_display'] = display_df['phone'].apply(format_phone)
+        display_df['phone_url'] = display_df['phone'].apply(get_phone_link)
+    
+        display_df['vk_display'] = display_df['vk_id'].apply(format_vk)
+        display_df['vk_url'] = display_df['vk_id'].apply(lambda x: f"https://{format_vk(x)}" if format_vk(x) else "")
+    
+        display_df['tg_display'] = display_df['tg_id'].apply(format_telegram)
+        display_df['tg_url'] = display_df['tg_id'].apply(lambda x: f"https://{format_telegram(x)}" if format_telegram(x) else "")
+    
+        # Переименовываем колонки для отображения
+        display_df.columns = ['ID', 'Имя', 'Пол', 'Телефон', 'VK', 'Telegram', 'Группа', 'Первая оплата', 
+                         'phone_display', 'phone_url', 'vk_display', 'vk_url', 'tg_display', 'tg_url']
+    
+        # Отображаем форматированную таблицу с кликабельными ссылками
+        st.dataframe(
+                display_df[['ID', 'Имя', 'Пол', 'phone_display', 'phone_url', 'vk_display', 'vk_url', 'tg_display', 'tg_url', 'Группа', 'Первая оплата']],
+                column_config={
+                    "ID": st.column_config.NumberColumn("ID", disabled=True),
+                    "Имя": st.column_config.TextColumn("Имя"),
+                    "Пол": st.column_config.TextColumn("Пол"),
+            
+                    # 📞 Телефон: кликабельная ссылка для звонка, отображается в формате +7 XXX XXX-XX-XX
+                    "phone_display": st.column_config.LinkColumn(
+                        "Телефон",
+                        display_text=":parent",
+                        url="phone_url"
+                    ),
+                    "phone_url": None,  # Скрываем техническую колонку с ссылкой
+            
+                    # 📘 VK: кликабельная ссылка, отображается как vk.com/idXXXX или vk.com/username
+                    "vk_display": st.column_config.LinkColumn(
+                        "VK",
+                        display_text=":parent",
+                        url="vk_url"
+                    ),
+                    "vk_url": None,  # Скрываем техническую колонку с ссылкой
+            
+                    # 💬 Telegram: кликабельная ссылка, отображается как t.me/username
+                    "tg_display": st.column_config.LinkColumn(
+                        "Telegram",
+                        display_text=":parent",
+                        url="tg_url"
+                    ),
+                    "tg_url": None,  # Скрываем техническую колонку с ссылкой
+            
+                    "Группа": st.column_config.TextColumn("Группа"),
+                    "Первая оплата": st.column_config.TextColumn("Первая оплата")
+                },
+                use_container_width=True,
+                hide_index=True
+    )
+
         # --- ВЫБОР КЛИЕНТА ДЛЯ РЕДАКТИРОВАНИЯ ---
         # Формируем список для выбора
         clients_options = ["-- Выберите клиента для редактирования --"] + \
@@ -398,43 +455,6 @@ if choice == "Клиенты и Группы":
                 ))
                 st.success("✅ Изменения сохранены!")
                 st.rerun()
-        
-        st.markdown("---")
-        
-        # --- ТАБЛИЦА ДЛЯ ПРОСМОТРА (С ССЫЛКАМИ) ---
-        display_df = clients_df_data.copy()
-        display_df['first_order_date'] = display_df['first_order_date'].apply(format_date_display)
-
-        # Создаём готовые кликабельные ссылки в формате маркдауна
-        display_df['Телефон'] = display_df.apply(
-            lambda row: f"[{format_phone(row['phone'])}]({get_phone_link(row['phone'])})" if row['phone'] else "",
-            axis=1
-        )
-        display_df['VK'] = display_df.apply(
-            lambda row: f"[{format_vk(row['vk_id'])}]({get_vk_link(row['vk_id'])})" if row['vk_id'] else "",
-            axis=1
-        )
-        display_df['Telegram'] = display_df.apply(
-            lambda row: f"[{format_telegram(row['tg_id'])}]({get_telegram_link(row['tg_id'])})" if row['tg_id'] else "",
-            axis=1
-        )
-
-        # Выводим готовую таблицу
-        st.dataframe(
-            display_df[['id', 'name', 'sex', 'Телефон', 'VK', 'Telegram', 'group_name', 'first_order_date']],
-            column_config={
-                "id": "ID",
-                "name": "Имя",
-                "sex": "Пол",
-                "Телефон": st.column_config.MarkdownColumn("Телефон"),
-                "VK": st.column_config.MarkdownColumn("VK"),
-                "Telegram": st.column_config.MarkdownColumn("Telegram"),
-                "group_name": "Группа",
-                "first_order_date": "Первая оплата"
-            },
-            use_container_width=True,
-            hide_index=True
-        )
     else:
         st.info("Клиенты не найдены")
 
@@ -442,7 +462,7 @@ if choice == "Клиенты и Группы":
 elif choice == "Прайс-лист Услуг":
     st.subheader("Справочник Услуг")
     
-    with st.expander("➕ Добавить новую услугу", expanded=True):
+    with st.expander("➕ Добавить новую услугу", expanded=False):
         with st.form("add_service"):
             s_name = st.text_input("Наименование услуги")
             s_price_str = st.text_input("Мин. прайс ₽", placeholder="10 000")
@@ -459,6 +479,12 @@ elif choice == "Прайс-лист Услуг":
     services_df = run_query("SELECT * FROM services_catalog", fetch=True)
     
     if not services_df.empty:
+        # Просмотр
+        display_services = services_df.copy()
+        display_services['min_price'] = display_services['min_price'].apply(lambda x: f"{format_currency(x)} ₽")
+        display_services.columns = ['ID', 'Услуга', 'Мин. прайс', 'Описание']
+        st.dataframe(display_services, use_container_width=True, hide_index=True)
+
         # --- ВЫБОР УСЛУГИ ---
         services_options = ["-- Выберите услугу для редактирования --"] + \
                            [f"#{row['id']} {row['name']}" for _, row in services_df.iterrows()]
@@ -468,8 +494,6 @@ elif choice == "Прайс-лист Услуг":
         if selected_service_opt != "-- Выберите услугу для редактирования --":
             service_id = int(selected_service_opt.split()[0][1:])
             service_row = services_df[services_df['id'] == service_id].iloc[0].to_frame().T
-            
-            st.markdown(f"#### ✏️ Редактирование услуги: {service_row['name'].iloc[0]}")
             
             edited_service = st.data_editor(
                 service_row,
@@ -504,14 +528,6 @@ elif choice == "Прайс-лист Услуг":
                 ))
                 st.success("✅ Изменения сохранены!")
                 st.rerun()
-        
-        st.markdown("---")
-        
-        # Просмотр
-        display_services = services_df.copy()
-        display_services['min_price'] = display_services['min_price'].apply(lambda x: f"{format_currency(x)} ₽")
-        display_services.columns = ['ID', 'Услуга', 'Мин. прайс', 'Описание']
-        st.dataframe(display_services, use_container_width=True, hide_index=True)
     else:
         st.info("Услуги еще не добавлены")
 
