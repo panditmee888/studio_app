@@ -402,7 +402,6 @@ if choice == "Клиенты и Группы":
         st.markdown("---")
         
         # --- ТАБЛИЦА ДЛЯ ПРОСМОТРА (С ССЫЛКАМИ) ---
-        # ✅ ИСПРАВЛЁННЫЙ КОД ДЛЯ ТАБЛИЦЫ С КЛИКАБЕЛЬНЫМИ ССЫЛКАМИ
         display_df = clients_df_data.copy()
         display_df['first_order_date'] = display_df['first_order_date'].apply(format_date_display)
 
@@ -424,20 +423,22 @@ if choice == "Клиенты и Группы":
                 "sex": "Пол",
                 "group_name": "Группа",
                 "first_order_date": "Первая оплата",
-                "phone_link": st.column_config.LinkColumn(
-                                 "Телефон",
-                                 display_text=display_df['phone_display']  # Передаём значения напрямую
-                              ),
-                "vk_link": st.column_config.LinkColumn(
-                                 "VK",
-                                 display_text=display_df['vk_display']  # Передаём значения напрямую
-                              ),
-                "tg_link": st.column_config.LinkColumn(
-                                 "Telegram",
-                                 display_text=display_df['tg_display']  # Передаём значения напрямую
-                              ),
         
-                # Скрываем вспомогательные колонки, чтобы они не отображались в таблице
+                # ✅ Исправленные кликабельные ссылки
+                "phone_link": st.column_config.LinkColumn(
+                    "Телефон",
+                    display_text=display_df['phone_display'].tolist()  # Преобразуем в список на месте
+                ),
+                "vk_link": st.column_config.LinkColumn(
+                    "VK",
+                    display_text=display_df['vk_display'].tolist()  # Преобразуем в список на месте
+                ),
+                "tg_link": st.column_config.LinkColumn(
+                    "Telegram",
+                    display_text=display_df['tg_display'].tolist()  # Преобразуем в список на месте
+                ),
+        
+                # Скрываем вспомогательные колонки
                 "phone_display": None,
                 "vk_display": None,
                 "tg_display": None
