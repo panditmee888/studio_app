@@ -405,43 +405,32 @@ if choice == "Клиенты и Группы":
         display_df = clients_df_data.copy()
         display_df['first_order_date'] = display_df['first_order_date'].apply(format_date_display)
 
-        # Формируем отображаемые значения и рабочие ссылки
-        display_df['phone_display'] = display_df['phone'].apply(format_phone)
-        display_df['vk_display'] = display_df['vk_id'].apply(format_vk)
-        display_df['tg_display'] = display_df['tg_id'].apply(format_telegram)
-
-        display_df['phone_link'] = display_df['phone'].apply(get_phone_link)
-        display_df['vk_link'] = display_df['vk_id'].apply(get_vk_link)
-        display_df['tg_link'] = display_df['tg_id'].apply(get_telegram_link)
+        # Создаём готовые кликабельные ссылки в формате маркдауна
+        display_df['Телефон'] = display_df.apply(
+            lambda row: f"[{format_phone(row['phone'])}]({get_phone_link(row['phone'])})" if row['phone'] else "",
+            axis=1
+        )
+        display_df['VK'] = display_df.apply(
+            lambda row: f"[{format_vk(row['vk_id'])}]({get_vk_link(row['vk_id'])})" if row['vk_id'] else "",
+            axis=1
+        )
+        display_df['Telegram'] = display_df.apply(
+            lambda row: f"[{format_telegram(row['tg_id'])}]({get_telegram_link(row['tg_id'])})" if row['tg_id'] else "",
+            axis=1
+        )
 
         # Выводим готовую таблицу
         st.dataframe(
-            display_df[['id', 'name', 'sex', 'phone_link', 'phone_display', 'vk_link', 'vk_display', 'tg_link', 'tg_display', 'group_name', 'first_order_date']],
+            display_df[['id', 'name', 'sex', 'Телефон', 'VK', 'Telegram', 'group_name', 'first_order_date']],
             column_config={
                 "id": "ID",
                 "name": "Имя",
                 "sex": "Пол",
+                "Телефон": st.column_config.MarkdownColumn("Телефон"),
+                "VK": st.column_config.MarkdownColumn("VK"),
+                "Telegram": st.column_config.MarkdownColumn("Telegram"),
                 "group_name": "Группа",
-                "first_order_date": "Первая оплата",
-        
-                # ✅ Исправленные кликабельные ссылки
-                "phone_link": st.column_config.LinkColumn(
-                    "Телефон",
-                    display_text=display_df['phone_display'].tolist()  # Преобразуем в список на месте
-                ),
-                "vk_link": st.column_config.LinkColumn(
-                    "VK",
-                    display_text=display_df['vk_display'].tolist()  # Преобразуем в список на месте
-                ),
-                "tg_link": st.column_config.LinkColumn(
-                    "Telegram",
-                    display_text=display_df['tg_display'].tolist()  # Преобразуем в список на месте
-                ),
-        
-                # Скрываем вспомогательные колонки
-                "phone_display": None,
-                "vk_display": None,
-                "tg_display": None
+                "first_order_date": "Первая оплата"
             },
             use_container_width=True,
             hide_index=True
