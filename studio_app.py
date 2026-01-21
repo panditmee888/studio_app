@@ -325,28 +325,28 @@ if choice == "Клиенты и Группы":
     if not clients_df_data.empty:
         st.info(f"Найдено клиентов: {len(clients_df_data)}")
     
-            # Создаём копию для отображения с форматированием
-            display_df = clients_df_data.copy()
+        # Создаём копию для отображения с форматированием
+        display_df = clients_df_data.copy()
     
-            # Форматируем все поля
-            display_df['first_order_date'] = display_df['first_order_date'].apply(format_date_display)
+        # Форматируем все поля
+        display_df['first_order_date'] = display_df['first_order_date'].apply(format_date_display)
     
-            # Форматируем контакты для отображения и готовим ссылки
-            display_df['phone_display'] = display_df['phone'].apply(format_phone)
-            display_df['phone_url'] = display_df['phone'].apply(get_phone_url)
+        # Форматируем контакты для отображения и готовим ссылки
+        display_df['phone_display'] = display_df['phone'].apply(format_phone)
+        display_df['phone_url'] = display_df['phone'].apply(get_phone_url)
     
-            display_df['vk_display'] = display_df['vk_id'].apply(format_vk)
-            display_df['vk_url'] = display_df['vk_id'].apply(lambda x: f"https://{format_vk(x)}" if format_vk(x) else "")
+        display_df['vk_display'] = display_df['vk_id'].apply(format_vk)
+        display_df['vk_url'] = display_df['vk_id'].apply(lambda x: f"https://{format_vk(x)}" if format_vk(x) else "")
     
-            display_df['tg_display'] = display_df['tg_id'].apply(format_telegram)
-            display_df['tg_url'] = display_df['tg_id'].apply(lambda x: f"https://{format_telegram(x)}" if format_telegram(x) else "")
+        display_df['tg_display'] = display_df['tg_id'].apply(format_telegram)
+        display_df['tg_url'] = display_df['tg_id'].apply(lambda x: f"https://{format_telegram(x)}" if format_telegram(x) else "")
     
-            # Переименовываем колонки для отображения
-            display_df.columns = ['ID', 'Имя', 'Пол', 'Телефон', 'VK', 'Telegram', 'Группа', 'Первая оплата', 
+        # Переименовываем колонки для отображения
+        display_df.columns = ['ID', 'Имя', 'Пол', 'Телефон', 'VK', 'Telegram', 'Группа', 'Первая оплата', 
                          'phone_display', 'phone_url', 'vk_display', 'vk_url', 'tg_display', 'tg_url']
     
-            # Отображаем форматированную таблицу с кликабельными ссылками
-            st.dataframe(
+        # Отображаем форматированную таблицу с кликабельными ссылками
+        st.dataframe(
                 display_df[['ID', 'Имя', 'Пол', 'phone_display', 'phone_url', 'vk_display', 'vk_url', 'tg_display', 'tg_url', 'Группа', 'Первая оплата']],
                 column_config={
                     "ID": st.column_config.NumberColumn("ID", disabled=True),
