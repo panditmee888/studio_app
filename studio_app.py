@@ -351,7 +351,7 @@ if choice == "Клиенты и Группы":
                 # ✅ Исправленные кликабельные ссылки
                 "phone_link": st.column_config.LinkColumn(
                     "Телефон",
-                    display_text="phone_display"  # Теперь передаём только название колонки
+                    display_text='phone_display'  # Теперь передаём только название колонки
                 ),
                 "vk_link": st.column_config.LinkColumn(
                     "VK",
