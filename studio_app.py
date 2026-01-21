@@ -330,13 +330,9 @@ if choice == "Клиенты и Группы":
         display_df['first_order_date'] = display_df['first_order_date'].apply(format_date_display)
         
         # Формируем колонки ссылок
-        display_df['phone_link'] = display_df['phone'].apply(get_phone_link)
-        display_df['vk_link'] = display_df['vk_id'].apply(get_vk_link)
-        display_df['tg_link'] = display_df['tg_id'].apply(get_telegram_link)
-        
-        display_df['phone_display'] = display_df['phone'].apply(format_phone)
-        display_df['vk_display'] = display_df['vk_id'].apply(format_vk)
-        display_df['tg_display'] = display_df['tg_id'].apply(format_telegram)
+        display_df['phone'] = display_df['phone'].apply(format_phone)
+        display_df['vk_id'] = display_df['vk_id'].apply(format_vk)
+        display_df['tg_id'] = display_df['tg_id'].apply(format_telegram)
         
         st.dataframe(
             display_df[['id', 'name', 'sex', 'phone_link', 'vk_link', 'tg_link', 'group_name', 'first_order_date']],
