@@ -4,6 +4,36 @@ import sqlite3
 from datetime import datetime, date
 import plotly.express as px
 
+# --- ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ПАГИНАЦИИ ---
+def paginate_dataframe(df, items_per_page=10, page_key="page"):
+    """Функция для постраничного отображения DataFrame"""
+    if df.empty:
+        return df, 1, 1
+    
+    total_items = len(df)
+    total_pages = (total_items + items_per_page - 1) // items_per_page
+    
+    if total_pages > 1:
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col1:
+            st.write(f"Всего записей: {total_items}")
+        with col2:
+            page = st.selectbox(
+                "Страница",
+                range(1, total_pages + 1),
+                key=page_key
+            )
+        with col3:
+            st.write(f"из {total_pages}")
+    else:
+        page = 1
+    
+    start_idx = (page - 1) * items_per_page
+    end_idx = start_idx + items_per_page
+    page_df = df.iloc[start_idx:end_idx]
+    
+    return page_df, page, total_pages
+
 # --- НАСТРОЙКА БД ---
 def init_db():
     conn = sqlite3.connect('studio.db')
@@ -64,8 +94,7 @@ def run_query(query, params=(), fetch=False):
         conn.commit()
     except Exception as e:
         st.error(f"Ошибка БД: {e}")
-    finally:
-        conn.close()
+    conn.close()
 
 # --- ИНТЕРФЕЙС ---
 st.set_page_config(page_title="Studio Admin", layout="wide")
@@ -73,7 +102,6 @@ init_db()
 
 st.title("🎛️ CRM Студии Звукозаписи")
 
-# Меню
 menu = ["Клиенты и Группы", "Прайс-лист Услуг", "Заказы", "Детализация Заказа", "ОТЧЁТЫ"]
 choice = st.sidebar.selectbox("Навигация", menu)
 
@@ -88,14 +116,12 @@ if choice == "Клиенты и Группы":
             if st.form_submit_button("Добавить группу"):
                 run_query("INSERT INTO groups (name) VALUES (?)", (new_group,))
                 st.success("Группа добавлена")
-                st.rerun()
         
         groups_df = run_query("SELECT * FROM groups", fetch=True)
         st.dataframe(groups_df, hide_index=True)
 
     with col2:
         st.subheader("Клиенты")
-        groups_df = run_query("SELECT * FROM groups", fetch=True)
         groups_list = groups_df['name'].tolist() if not groups_df.empty else []
         group_map = dict(zip(groups_df['name'], groups_df['id'])) if not groups_df.empty else {}
 
@@ -106,17 +132,15 @@ if choice == "Клиенты и Группы":
                 c_phone = st.text_input("Телефон")
                 c_vk = st.text_input("VK ID")
                 c_tg = st.text_input("Telegram ID")
-                c_group = st.selectbox("Группа", options=[""] + groups_list)
+                c_group = st.selectbox("Группа", options=groups_list)
                 
                 if st.form_submit_button("Сохранить клиента"):
-                    if c_group:
-                        g_id = group_map.get(c_group)
-                        run_query('''INSERT INTO clients (name, sex, phone, vk_id, tg_id, group_id) 
-                                     VALUES (?,?,?,?,?,?)''', (c_name, c_sex, c_phone, c_vk, c_tg, g_id))
-                        st.success("Клиент добавлен")
-                        st.rerun()
+                    g_id = group_map.get(c_group)
+                    run_query('''INSERT INTO clients (name, sex, phone, vk_id, tg_id, group_id) 
+                                 VALUES (?,?,?,?,?,?)''', (c_name, c_sex, c_phone, c_vk, c_tg, g_id))
+                    st.success("Клиент добавлен")
 
-        # Отображение клиентов С ПАГИНАЦИЕЙ
+        # Отображение клиентов с пагинацией
         clients_query = '''
         SELECT c.id, c.name, c.sex, c.phone, c.vk_id, c.tg_id, g.name as group_name, c.first_order_date
         FROM clients c LEFT JOIN groups g ON c.group_id = g.id
@@ -125,142 +149,126 @@ if choice == "Клиенты и Группы":
         clients_df = run_query(clients_query, fetch=True)
         
         if not clients_df.empty:
-            page_size = 15
-            total_pages = (len(clients_df) + page_size - 1) // page_size
-            page_num = st.slider("Страница клиентов", 1, total_pages, 1)
-            
-            start_idx = (page_num - 1) * page_size
-            end_idx = min(start_idx + page_size, len(clients_df))
-            page_df = clients_df.iloc[start_idx:end_idx]
-            
+            page_df, current_page, total_pages = paginate_dataframe(clients_df, items_per_page=15, page_key="clients_page")
             st.dataframe(page_df, use_container_width=True)
-            st.caption(f"Показаны записи {start_idx+1}-{end_idx} из {len(clients_df)}")
+            
+            if total_pages > 1:
+                st.caption(f"Показана страница {current_page} из {total_pages}")
         else:
-            st.info("Клиентов пока нет")
+            st.info("Клиенты еще не добавлены")
 
 # --- 2. ПРАЙС-ЛИСТ ---
 elif choice == "Прайс-лист Услуг":
     st.subheader("Справочник Услуг")
     
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        with st.expander("➕ Добавить услугу"):
-            with st.form("add_service"):
-                s_name = st.text_input("Наименование услуги")
-                s_price = st.number_input("Мин. прайс", min_value=0.0)
-                s_desc = st.text_area("Описание")
-                if st.form_submit_button("Добавить услугу"):
-                    run_query("INSERT INTO services_catalog (name, min_price, description) VALUES (?,?,?)", 
-                              (s_name, s_price, s_desc))
-                    st.success("Услуга добавлена")
-                    st.rerun()
-    
-    with col2:
-        services_df = run_query("SELECT * FROM services_catalog ORDER BY id DESC", fetch=True)
-        st.dataframe(services_df, use_container_width=True)
+    with st.expander("Добавить новую услугу"):
+        with st.form("add_service"):
+            s_name = st.text_input("Наименование услуги")
+            s_price = st.number_input("Мин. прайс", min_value=0.0)
+            s_desc = st.text_area("Описание")
+            if st.form_submit_button("Добавить услугу"):
+                run_query("INSERT INTO services_catalog (name, min_price, description) VALUES (?,?,?)", 
+                          (s_name, s_price, s_desc))
+                st.success("Услуга добавлена")
+            
+    st.subheader("Список услуг")
+    st.dataframe(run_query("SELECT * FROM services_catalog", fetch=True), use_container_width=True)
 
 # --- 3. ЗАКАЗЫ ---
 elif choice == "Заказы":
     st.subheader("Управление Заказами")
     
-    clients_df = run_query("SELECT id, name FROM clients ORDER BY name", fetch=True)
+    clients_df = run_query("SELECT id, name FROM clients", fetch=True)
     client_map = dict(zip(clients_df['name'], clients_df['id'])) if not clients_df.empty else {}
 
-    with st.expander("➕ Создать новый заказ"):
+    with st.expander("Создать новый заказ"):
         with st.form("new_order"):
-            o_client = st.selectbox("Клиент", list(client_map.keys()) if client_map else [])
+            o_client = st.selectbox("Клиент", list(client_map.keys()))
             o_date = st.date_input("Дата исполнения")
             o_status = st.selectbox("Статус", ["В работе", "Выполнен", "Отменен", "Оплачен"])
             
-            if st.form_submit_button("Создать заказ") and o_client:
+            if st.form_submit_button("Создать заказ"):
                 c_id = client_map.get(o_client)
-                order_id = run_query("INSERT INTO orders (client_id, execution_date, status) VALUES (?,?,?) RETURNING id", 
-                                     (c_id, o_date, o_status), fetch=False)
+                run_query("INSERT INTO orders (client_id, execution_date, status) VALUES (?,?,?)", 
+                          (c_id, o_date, o_status))
+                
                 run_query('''UPDATE clients SET first_order_date = ? 
                              WHERE id = ? AND first_order_date IS NULL''', (o_date, c_id))
-                st.success("Заказ создан! Перейдите в 'Детализация Заказа'.")
-                st.rerun()
+                st.success("Заказ создан! Перейдите в 'Детализация Заказа' для добавления услуг.")
 
-    # Таблица заказов С ПАГИНАЦИЕЙ
+    # Таблица заказов с пагинацией
     orders_sql = '''
     SELECT o.id, c.name as Client, o.execution_date, o.status, o.total_amount 
     FROM orders o JOIN clients c ON o.client_id = c.id
-    ORDER BY o.execution_date DESC, o.id DESC
+    ORDER BY o.execution_date DESC
     '''
     df_orders = run_query(orders_sql, fetch=True)
     
     if not df_orders.empty:
-        page_size = 15
-        total_pages = (len(df_orders) + page_size - 1) // page_size
-        page_num = st.slider("Страница заказов", 1, total_pages, 1)
-        
-        start_idx = (page_num - 1) * page_size
-        end_idx = min(start_idx + page_size, len(df_orders))
-        page_df = df_orders.iloc[start_idx:end_idx]
-        
+        page_df, current_page, total_pages = paginate_dataframe(df_orders, items_per_page=15, page_key="orders_page")
         st.dataframe(page_df, use_container_width=True)
-        st.caption(f"Показаны записи {start_idx+1}-{end_idx} из {len(df_orders)}")
+        
+        if total_pages > 1:
+            st.caption(f"Показана страница {current_page} из {total_pages}")
     else:
-        st.info("Заказов пока нет")
+        st.info("Заказы еще не созданы")
 
-# --- 4. ДЕТАЛИЗАЦИЯ ЗАКАЗА ---
+# --- 4. ДЕТАЛИЗАЦИЯ ЗАКАЗА (SERVICES) ---
 elif choice == "Детализация Заказа":
     st.subheader("Внутренние услуги заказа")
     
-    orders_df = run_query("SELECT o.id, c.name, o.execution_date FROM orders o JOIN clients c ON o.client_id = c.id ORDER BY o.id DESC", fetch=True)
-    
+    # Выбор заказа
+    orders_df = run_query("SELECT o.id, c.name, o.execution_date FROM orders o JOIN clients c ON o.client_id = c.id", fetch=True)
     if not orders_df.empty:
         orders_df['label'] = orders_df.apply(lambda x: f"Заказ #{x['id']} - {x['name']} ({x['execution_date']})", axis=1)
-        order_selection = st.selectbox("Выберите заказ для редактирования:", orders_df['label'])
+        order_selection = st.selectbox("Выберите заказ для редактирования", orders_df['label'])
         order_id = orders_df[orders_df['label'] == order_selection]['id'].values[0]
 
-        col1, col2 = st.columns([1, 2])
+        # Форма добавления услуги в заказ
+        services_cat = run_query("SELECT name FROM services_catalog", fetch=True)
+        srv_list = services_cat['name'].tolist() if not services_cat.empty else []
         
+        col1, col2 = st.columns(2)
         with col1:
-            st.markdown("### ➕ Добавить услугу")
-            services_cat = run_query("SELECT name FROM services_catalog", fetch=True)
-            srv_list = services_cat['name'].tolist() if not services_cat.empty else []
-            
-            service_choice = st.selectbox("Услуга (из каталога) или введите свою", srv_list + ["Другое"])
-            service_name = service_choice
-            
-            if service_choice == "Другое":
-                service_name = st.text_input("Название услуги вручную", key=f"custom_service_{order_id}")
-            
-            payment_date = st.date_input("Дата оплаты", key=f"date_{order_id}")
-            amount = st.number_input("Сумма", min_value=0.0, key=f"amount_{order_id}")
-            hours = st.number_input("Кол-во часов", min_value=0.0, step=0.5, key=f"hours_{order_id}")
-            
-            if st.button("✅ Добавить услугу в заказ", key=f"add_{order_id}"):
-                run_query("INSERT INTO order_items (order_id, service_name, payment_date, amount, hours) VALUES (?,?,?,?,?)",
-                          (order_id, service_name, payment_date, amount, hours))
-                # Обновляем общую сумму заказа
-                run_query("UPDATE orders SET total_amount = (SELECT COALESCE(SUM(amount), 0) FROM order_items WHERE order_id=?) WHERE id=?", 
-                          (order_id, order_id))
-                st.success("Услуга добавлена!")
-                st.rerun()
+            st.markdown("#### Добавить услугу")
+            with st.form("add_item", clear_on_submit=True):
+                service_choice = st.selectbox("Услуга (из каталога) или введите свою", srv_list + ["Другое"])
+                
+                if service_choice == "Другое":
+                    i_name = st.text_input("Название услуги вручную")
+                else:
+                    i_name = service_choice
+                
+                i_date = st.date_input("Дата оплаты")
+                i_amount = st.number_input("Сумма", min_value=0.0)
+                i_hours = st.number_input("Кол-во часов", min_value=0.0, step=0.5)
+                
+                if st.form_submit_button("Добавить"):
+                    if i_name and i_amount > 0:
+                        run_query("INSERT INTO order_items (order_id, service_name, payment_date, amount, hours) VALUES (?,?,?,?,?)",
+                                  (order_id, i_name, i_date, i_amount, i_hours))
+                        run_query("UPDATE orders SET total_amount = (SELECT SUM(amount) FROM order_items WHERE order_id=?) WHERE id=?", (order_id, order_id))
+                        st.success(f"Услага '{i_name}' добавлена в заказ!")
+                        st.rerun()
+                    else:
+                        st.error("Заполните название услуги и сумму")
         
         with col2:
-            st.markdown(f"### 📋 Состав заказа #{order_id}")
-            items_df = run_query(f"SELECT id, service_name, payment_date, amount, hours FROM order_items WHERE order_id=? ORDER BY id DESC", 
-                                (order_id,), fetch=True)
+            st.markdown(f"#### Состав заказа #{order_id}")
+            items_df = run_query(f"SELECT id, service_name, payment_date, amount, hours FROM order_items WHERE order_id={order_id}", fetch=True)
             if not items_df.empty:
-                st.dataframe(items_df, hide_index=True, use_container_width=True)
+                st.dataframe(items_df, hide_index=True)
                 
-                # Удаление услуги
-                st.markdown("**Удалить услугу:**")
-                del_id = st.number_input("ID услуги для удаления:", min_value=1, value=1, step=1, key=f"del_{order_id}")
-                if st.button("🗑️ Удалить", key=f"delete_{order_id}"):
-                    run_query("DELETE FROM order_items WHERE id=?", (del_id,))
-                    run_query("UPDATE orders SET total_amount = (SELECT COALESCE(SUM(amount), 0) FROM order_items WHERE order_id=?) WHERE id=?", 
-                              (order_id, order_id))
+                del_id = st.number_input("ID услуги для удаления", min_value=0, step=1)
+                if st.button("Удалить услугу"):
+                    run_query(f"DELETE FROM order_items WHERE id={del_id}")
+                    run_query("UPDATE orders SET total_amount = (SELECT SUM(amount) FROM order_items WHERE order_id=?) WHERE id=?", (order_id, order_id))
                     st.success("Услуга удалена!")
                     st.rerun()
             else:
-                st.info("В заказе пока нет услуг")
-                
+                st.info("В этом заказе еще нет услуг")
     else:
-        st.warning("Сначала создайте заказ в разделе 'Заказы'.")
+        st.info("Сначала создайте заказ.")
 
 # --- 5. ОТЧЁТЫ ---
 elif choice == "ОТЧЁТЫ":
@@ -278,9 +286,9 @@ elif choice == "ОТЧЁТЫ":
         df['execution_date'] = pd.to_datetime(df['execution_date'])
         df['year'] = df['execution_date'].dt.year
         df['month'] = df['execution_date'].dt.month
-        
+        df['month_name'] = df['execution_date'].dt.strftime('%B')
+
         years = sorted(df['year'].unique())
-        
         current_year = datetime.now().year
         
         # --- ОТЧЕТ 1: Заказы за год по группам ---
@@ -306,10 +314,8 @@ elif choice == "ОТЧЁТЫ":
 
         # --- ОТЧЕТ 3: Новые клиенты за год ---
         st.subheader("3. Новые клиенты за год")
-        # Логика: фильтруем клиентов, у которых first_order_date попадает в выбранный год
         sel_year_3 = st.selectbox("Выберите год (Новые клиенты)", years, index=len(years)-1, key='y3')
         
-        # Получаем полные данные о клиентах для этого отчета
         df_new_clients = run_query('''
             SELECT c.name, c.first_order_date, COUNT(o.id) as count, SUM(o.total_amount) as sum
             FROM clients c 
@@ -358,7 +364,6 @@ elif choice == "ОТЧЁТЫ":
 
         # --- ОТЧЕТ 7: Оплата за неделю ---
         st.subheader("7. Оплаты за последнюю неделю (по Order Items)")
-        # Здесь нужно брать дату из order_items
         df_items = run_query('''
             SELECT c.name, oi.payment_date, oi.amount 
             FROM order_items oi
@@ -368,7 +373,6 @@ elif choice == "ОТЧЁТЫ":
         
         if not df_items.empty:
             df_items['payment_date'] = pd.to_datetime(df_items['payment_date'])
-            # Фильтр: текущая дата - 7 дней
             week_ago = pd.Timestamp.now() - pd.Timedelta(days=7)
             df_7 = df_items[df_items['payment_date'] >= week_ago]
             st.dataframe(df_7, use_container_width=True)
