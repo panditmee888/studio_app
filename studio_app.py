@@ -402,29 +402,47 @@ if choice == "Клиенты и Группы":
         st.markdown("---")
         
         # --- ТАБЛИЦА ДЛЯ ПРОСМОТРА (С ССЫЛКАМИ) ---
+        # ✅ ИСПРАВЛЁННЫЙ КОД ДЛЯ ТАБЛИЦЫ С КЛИКАБЕЛЬНЫМИ ССЫЛКАМИ
         display_df = clients_df_data.copy()
         display_df['first_order_date'] = display_df['first_order_date'].apply(format_date_display)
-        
-        # Формируем колонки ссылок
-        display_df['phone_link'] = display_df['phone'].apply(get_phone_link)
-        display_df['vk_link'] = display_df['vk_id'].apply(get_vk_link)
-        display_df['tg_link'] = display_df['tg_id'].apply(get_telegram_link)
-        
+
+        # Формируем отображаемые значения и рабочие ссылки
         display_df['phone_display'] = display_df['phone'].apply(format_phone)
         display_df['vk_display'] = display_df['vk_id'].apply(format_vk)
         display_df['tg_display'] = display_df['tg_id'].apply(format_telegram)
-        
+
+        display_df['phone_link'] = display_df['phone'].apply(get_phone_link)
+        display_df['vk_link'] = display_df['vk_id'].apply(get_vk_link)
+        display_df['tg_link'] = display_df['tg_id'].apply(get_telegram_link)
+
+        # Выводим готовую таблицу
         st.dataframe(
-            display_df[['id', 'name', 'sex', 'phone_link', 'vk_link', 'tg_link', 'group_name', 'first_order_date']],
+            display_df[['id', 'name', 'sex', 'phone_link', 'phone_display', 'vk_link', 'vk_display', 'tg_link', 'tg_display', 'group_name', 'first_order_date']],
             column_config={
                 "id": "ID",
                 "name": "Имя",
                 "sex": "Пол",
                 "group_name": "Группа",
                 "first_order_date": "Первая оплата",
-                "phone_link": st.column_config.LinkColumn("Телефон", display_text="phone_display"),
-                "vk_link": st.column_config.LinkColumn("VK", display_text="vk_display"),
-                "tg_link": st.column_config.LinkColumn("Telegram", display_text="tg_display"),
+        
+                # ✅ Исправленные кликабельные ссылки
+                "phone_link": st.column_config.LinkColumn(
+                    "Телефон",
+                    display_text="phone_display"  # Теперь передаём только название колонки
+                ),
+                "vk_link": st.column_config.LinkColumn(
+                    "VK",
+                    display_text="vk_display"
+                ),
+                "tg_link": st.column_config.LinkColumn(
+                    "Telegram",
+                    display_text="tg_display"
+                ),
+        
+                # Скрываем вспомогательные колонки, чтобы они не отображались в таблице
+                "phone_display": None,
+                "vk_display": None,
+                "tg_display": None
             },
             use_container_width=True,
             hide_index=True
