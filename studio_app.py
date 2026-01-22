@@ -247,21 +247,26 @@ if choice == "Клиенты и Группы":
                 
                     phone_input_id = f"phone_{uuid.uuid4().hex}"
                 
-                    # Этот блок HTML вставляет input с маской +7 (000) 000-00-00
                     components.html(f"""
                     <script src="https://unpkg.com/imask"></script>
                 
                     <style>
                     #{phone_input_id} {{
+                        background-color: #0e1117;
+                        color: #f0f2f6;
+                        border: 1px solid #565a5f;
+                        border-radius: 0.375rem;
+                        font-family: "Source Sans Pro", sans-serif;
+                        font-size: 0.92rem;
+                        height: 34px;
+                        padding-left: 11px;
                         width: 100%;
-                        padding: 0.45rem;
-                        font-size: 0.95rem;
-                        border: 1px solid #ccc;
-                        border-radius: 0.25rem;
+                        box-sizing: border-box;
                     }}
+                
                     #{phone_input_id}.invalid {{
                         border-color: red;
-                        background-color: #ffe6e6;
+                        background-color: #2d0000;
                     }}
                     </style>
                 
@@ -286,14 +291,16 @@ if choice == "Клиенты и Группы":
                 
                       el.addEventListener('input', () => {{
                         validate();
-                        window.parent.postMessage({{ type: 'streamlit:setComponentValue', value: mask.unmaskedValue }}, '*');
+                        window.parent.postMessage({{
+                            type: 'streamlit:setComponentValue',
+                            value: mask.unmaskedValue
+                        }}, '*');
                       }});
                       validate();
                     </script>
                     """, height=70)
                 
-                # Получаем введённый телефон из session_state
-                c_phone_raw = st.session_state.get("component_value")
+                    c_phone_raw = st.session_state.get("component_value")
                 with col5:
                     c_vk_raw = st.text_input("VK ID", placeholder="id123456 или username")
                 with col6:
