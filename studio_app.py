@@ -402,21 +402,39 @@ if choice == "Клиенты и Группы":
 
     params = []
 
-    if search_query:
-        search_query_normalized = search_query.lower()
-        like_pattern = f"%{search_query_normalized}%"
+    if search_query and len(search_query) > 0:
+        # ✅ Создаем ВСЕ возможные варианты регистра поискового запроса
+        # чтобы найти совпадение в любом случае
+        queries = [
+            search_query,                  # Как есть
+            search_query.lower(),          # Всё в нижнем регистре
+            search_query.upper(),          # Всё в верхнем регистре
+            search_query.capitalize(),     # Первая буква заглавная, остальные строчные
+            search_query[0].lower() + search_query[1:] if len(search_query)>1 else search_query.lower() # Первая буква строчная
+        ]
     
+        # Добавляем все варианты в запрос
         clients_query += ''' AND (
-            LOWER(c.name) LIKE ? OR 
-            c.phone LIKE ? OR 
-            LOWER(c.vk_id) LIKE ? OR 
-            LOWER(c.tg_id) LIKE ?
+            c.name LIKE ? OR c.name LIKE ? OR c.name LIKE ? OR c.name LIKE ? OR c.name LIKE ? OR
+            c.phone LIKE ? OR c.phone LIKE ? OR c.phone LIKE ? OR c.phone LIKE ? OR c.phone LIKE ? OR
+            c.vk_id LIKE ? OR c.vk_id LIKE ? OR c.vk_id LIKE ? OR c.vk_id LIKE ? OR c.vk_id LIKE ? OR
+            c.tg_id LIKE ? OR c.tg_id LIKE ? OR c.tg_id LIKE ? OR c.tg_id LIKE ? OR c.tg_id LIKE ?
         )'''
-        params.extend([like_pattern, f"%{search_query}%", like_pattern, like_pattern])
+    
+        # Добавляем все шаблоны поиска в параметры
+        for q in queries:
+            params.extend([f"%{q}%"]*4)
 
     if filter_group != "Все":
-        clients_query += ' AND g.name = ?'
-        params.append(filter_group)
+        # Аналогично делаем фильтр по группам нечувствительным к регистру
+        group_queries = [
+            filter_group,
+            filter_group.lower(),
+            filter_group.upper(),
+            filter_group.capitalize()
+        ]
+        clients_query += ' AND (' + ' OR g.name LIKE ?'*4 + ')'
+        params.extend([f"%{g}%" for g in group_queries])
 
     clients_query += ' ORDER BY c.id DESC'
     clients_df_data = run_query(clients_query, tuple(params), fetch=True)
