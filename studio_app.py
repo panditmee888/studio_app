@@ -376,7 +376,6 @@ if choice == "Клиенты и Группы":
                         else:
                             st.error("❌ Введите название группы")
             with col2:
-                
                 if not groups_df.empty:
                     groups_display = groups_df.copy()
                     groups_display.columns = ['ID', 'Название группы']
@@ -438,16 +437,6 @@ if choice == "Клиенты и Группы":
                         run_query("DELETE FROM groups WHERE id=?", (selected_id,))
                         st.success("✅ Группа удалена!")
                         st.rerun()
-
-        # Отображаем актуальный список всех групп
-        st.markdown("---")
-        st.markdown("### 📋 Список всех групп")
-        if not groups_df.empty:
-            disp_df = groups_df.copy()
-            disp_df.columns = ['ID', 'Название группы']
-            st.dataframe(disp_df, use_container_width=True, hide_index=True)
-        else:
-            st.info("ℹ️ Групп пока нет")
 
     # Поиск и фильтрация
     st.markdown("### 🔍 Поиск и фильтрация")
