@@ -242,11 +242,11 @@ if choice == "Клиенты и Группы":
                 col4, col5, col6 = st.columns(3)
                 with col4:
                         c_phone_raw = st.text_input(
-                            "Телефон", 
-                            placeholder="Введите номер телефона",
-                            mask="+7 999 999-99-99",
-                            help="Введите номер в любом формате. Сохраняется как 7XXXXXXXXXX, отображается с маской."
-                        )
+                        "Телефон", 
+                        placeholder="Введите номер телефона",
+                        mask="+7 999 999-99-99",
+                        help="Введите номер в любом формате. Сохраняется как 7XXXXXXXXXX, отображается с маской."
+                )
                 with col5:
                     c_vk_raw = st.text_input("VK ID", placeholder="id123456 или username")
                 with col6:
