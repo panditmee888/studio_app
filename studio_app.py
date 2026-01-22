@@ -648,7 +648,7 @@ elif choice == "Заказы и услуги":
     srv_list = services_cat['name'].tolist() if not services_cat.empty else []
 
     # --- Основная разметка на две колонки ---
-    left_col, right_col = st.columns([1, 2])
+    left_col, right_col = st.columns([1, 1])
 
     with left_col:
         # 1. Выбор действия с заказом
