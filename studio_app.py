@@ -8,58 +8,42 @@ import re
 STATUS_LIST = ["В работе", "Ожидает оплаты", "Выполнен", "Оплачен"]
 
 # --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
-def normalize_phone(phone_str):
-    """Приводит телефон к чистым цифрам для хранения в БД"""
+def format_phone(phone_str):
+    """Форматирование телефона в +7 000 000-00-00"""
     if not phone_str or pd.isna(phone_str):
         return ""
     digits = ''.join(filter(str.isdigit, str(phone_str)))
-    # Нормализуем формат: приводим к 10 цифрам после 7
-    if len(digits) == 11 and digits.startswith('8'):
+    if digits.startswith('8') and len(digits) == 11:
         digits = '7' + digits[1:]
-    elif len(digits) == 10:
+    if len(digits) == 10:
         digits = '7' + digits
-    return digits[-11:] if len(digits)>=11 else digits
-
-def format_phone(phone_str):
-    """Форматирует телефон в кликабельную ссылку +7 000 000-00-00"""
-    if not phone_str or pd.isna(phone_str):
-        return ""
-    digits = normalize_phone(phone_str)
-    if len(digits) >=11:
-        masked = f"+{digits[0]} {digits[1:4]} {digits[4:7]}-{digits[7:9]}-{digits[9:11]}"
-        return f"[{masked}](tel:{digits})"
+    if len(digits) >= 11:
+        return f"+{digits[0]} {digits[1:4]} {digits[4:7]}-{digits[7:9]}-{digits[9:11]}"
     return phone_str
 
-def normalize_vk(vk_str):
-    """Оставляет только цифры VK ID для хранения в БД"""
+def format_vk(vk_str):
+    """Форматирование VK ID для отображения"""
     if not vk_str or pd.isna(vk_str):
         return ""
-    return ''.join(filter(str.isdigit, str(vk_str)))
-
-def format_vk(vk_str):
-    """Форматирует VK ID в кликабельную ссылку"""
-    vk_id = normalize_vk(vk_str)
-    if not vk_id:
-        return ""
-    return f"[vk.com/id{vk_id}](https://vk.com/id{vk_id})"
-
-def normalize_tg(tg_str):
-    """Оставляет только чистый юзернейм Telegram для хранения в БД"""
-    if not tg_str or pd.isna(tg_str):
-        return ""
-    tg = str(tg_str).strip().lower()
-    # Удаляем лишние символы
-    tg = tg.replace("https://", "").replace("http://", "").replace("@", "")
-    if tg.startswith("t.me/"):
-        tg = tg[5:]
-    return tg
+    vk = str(vk_str).strip()
+    vk = vk.replace("https://", "").replace("http://", "")
+    if vk.startswith("vk.com/"):
+        return vk
+    if vk.startswith("id") and vk[2:].isdigit():
+        return f"vk.com/{vk}"
+    if vk.isdigit():
+        return f"vk.com/id{vk}"
+    return f"vk.com/{vk}"
 
 def format_telegram(tg_str):
-    """Форматирует Telegram ID в кликабельную ссылку"""
-    tg_username = normalize_tg(tg_str)
-    if not tg_username:
+    """Форматирование Telegram для отображения"""
+    if not tg_str or pd.isna(tg_str):
         return ""
-    return f"[t.me/{tg_username}](https://t.me/{tg_username})"
+    tg = str(tg_str).strip()
+    tg = tg.replace("https://", "").replace("http://", "").replace("@", "")
+    if tg.startswith("t.me/"):
+        return tg
+    return f"t.me/{tg}"
 
 def format_date_display(date_str):
     """Форматирование даты в dd.mm.yyyy"""
@@ -113,10 +97,10 @@ def parse_currency(amount_str):
 def update_client_first_order_date(client_id):
     """Обновляет дату первого заказа клиента по первой оплате"""
     result = run_query('''
-    SELECT MIN(oi.payment_date) as first_payment
-    FROM order_items oi
-    JOIN orders o ON oi.order_id = o.id
-    WHERE o.client_id = ? AND oi.payment_date IS NOT NULL
+        SELECT MIN(oi.payment_date) as first_payment
+        FROM order_items oi
+        JOIN orders o ON oi.order_id = o.id
+        WHERE o.client_id = ? AND oi.payment_date IS NOT NULL
     ''', (client_id,), fetch=True)
 
     if not result.empty and result['first_payment'].iloc[0]:
@@ -126,6 +110,7 @@ def update_client_first_order_date(client_id):
         )
 
 def init_db():
+    """Инициализация базы данных"""
     conn = sqlite3.connect('studio.db')
     c = conn.cursor()
     c.execute("PRAGMA foreign_keys = ON;")
@@ -172,6 +157,7 @@ def init_db():
     conn.close()
 
 def run_query(query, params=(), fetch=False):
+    """Выполняет SQL запрос"""
     conn = sqlite3.connect('studio.db')
     c = conn.cursor()
     try:
@@ -202,277 +188,78 @@ choice = st.sidebar.selectbox("Навигация", menu)
 if choice == "Клиенты и Группы":
     st.subheader("Клиенты")
 
-    # Получаем группы
+    # Получаем список групп
     groups_df = run_query("SELECT id, name FROM groups", fetch=True)
-    groups_list = groups_df['name'].tolist() if not groups_df.empty else []
     group_map = dict(zip(groups_df['name'], groups_df['id'])) if not groups_df.empty else {}
+    groups_list = list(group_map.keys())
 
-    # Форма добавления клиента
+    # Добавление клиента
     with st.expander("➕ Добавить нового клиента"):
         with st.form("add_client"):
-            c_name = st.text_input("Имя *", placeholder="Иван Иванов")
+            c_name = st.text_input("Имя *", placeholder="Иванов Иван")
             c_sex = st.selectbox("Пол", ["М", "Ж"])
-            
-            # 📞 Телефон с маской ввода
-            c_phone_raw = st.text_input(
-                "Телефон", 
-                placeholder="+7 000 000-00-00",
-                mask="+7 999 999-99-99",
-                help="Введите номер в формате +7 000 000-00-00"
-            )
-            
-            # 📱 VK ID с валидацией
-            c_vk_raw = st.text_input(
-                "VK ID", 
-                placeholder="123456789",
-                help="Введите только цифры ID пользователя VK"
-            )
-            
-            # 🤖 Telegram ID с валидацией
-            c_tg_raw = st.text_input(
-                "Telegram", 
-                placeholder="username",
-                help="Введите только юзернейм без @ и ссылок"
-            )
-            
-            # Группа
-            if groups_list:
-                c_group = st.selectbox("Группа", options=["Без группы"] + groups_list)
-            else:
-                c_group = "Без группы"
-                st.info("Группы еще не созданы")
-            
+            c_phone_raw = st.text_input("Телефон", placeholder="+7 999 123-45-67")
+
+            c_vk_raw = st.text_input("VK ID", placeholder="id123456 или username")
+            c_tg_raw = st.text_input("Telegram", placeholder="@username")
+
+            c_group = st.selectbox("Группа", ["Без группы"] + groups_list)
+
             if st.form_submit_button("Сохранить клиента"):
-                if not c_name:
-                    st.error("Введите имя клиента")
-                else:
-                    # Валидация VK
-                    vk_error = False
-                    if c_vk_raw and not c_vk_raw.isdigit():
-                        st.error("VK ID должен содержать только цифры")
-                        vk_error = True
-                    
-                    # Валидация Telegram
-                    tg_error = False
-                    if c_tg_raw and not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*\(', c_tg_raw):
-                        st.error("Telegram юзернейм должен начинаться с буквы и содержать только буквы, цифры и подчеркивания")
-                        tg_error = True
-                    
-                    if not vk_error and not tg_error:
-                        # Нормализуем данные перед сохранением в БД
-                        phone = normalize_phone(c_phone_raw)
-                        vk = normalize_vk(c_vk_raw)
-                        tg = normalize_tg(c_tg_raw)
-                        g_id = group_map.get(c_group) if c_group != "Без группы" else None
-                        
-                        run_query('''INSERT INTO clients 
-                            (name, sex, phone, vk_id, tg_id, group_id) 
-                            VALUES (?,?,?,?,?,?)''', 
-                            (c_name, c_sex, phone, vk, tg, g_id))
-                        st.success("✅ Клиент добавлен!")
-                        st.rerun()
+                if c_name.strip():
+                    # Очистка / нормализация
+                    phone = c_phone_raw.strip()
+                    vk = c_vk_raw.strip().replace("https://", "").replace("http://", "").replace("vk.com/", "")
+                    tg = c_tg_raw.strip().replace("@", "").replace("t.me/", "").replace("https://", "")
 
-    # Управление группами
-    with st.expander("⚙️ Группы клиентов", expanded=False):
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            with st.form("add_group"):
-                new_group = st.text_input("Название группы")
-                if st.form_submit_button("Добавить группу"):
-                    if new_group:
-                        run_query("INSERT INTO groups (name) VALUES (?)", (new_group,))
-                        st.success("Группа добавлена")
-                        st.rerun()
-        with col2:
-            st.write("Список групп:")
-            if not groups_df.empty:
-                for idx, row in groups_df.iterrows():
-                    col_a, col_b, col_c = st.columns([3, 1, 1])
-                    with col_a:
-                        new_name = st.text_input(
-                            "Название", 
-                            value=row['name'], 
-                            key=f"group_name_{row['id']}",
-                            label_visibility="collapsed"
-                        )
-                    with col_b:
-                        if st.button("💾", key=f"update_{row['id']}", help="Сохранить"):
-                            if new_name and new_name != row['name']:
-                                run_query("UPDATE groups SET name=? WHERE id=?", (new_name, row['id']))
-                                st.success("Группа обновлена")
-                                st.rerun()
-                    with col_c:
-                        if st.button("🗑️", key=f"delete_{row['id']}", help="Удалить"):
-                            clients_check = run_query(
-                                "SELECT COUNT(*) as count FROM clients WHERE group_id=?", 
-                                (row['id'],), 
-                                fetch=True
-                            )
-                            if not clients_check.empty and clients_check['count'].iloc[0] > 0:
-                                st.warning("Нельзя удалить группу с клиентами!")
-                            else:
-                                run_query("DELETE FROM groups WHERE id=?", (row['id'],))
-                                st.success("Группа удалена")
-                                st.rerun()
-            else:
-                st.info("Групп пока нет")
+                    g_id = group_map.get(c_group) if c_group != "Без группы" else None
 
-    # Поиск и фильтрация
-    st.markdown("### 🔍 Поиск и фильтрация")
-    search_col1, search_col2 = st.columns([2, 1])
-    with search_col1:
-        search_query = st.text_input("Поиск по имени, телефону, VK или Telegram", placeholder="Введите текст...")
-    with search_col2:
-        filter_group = st.selectbox("Фильтр по группе", ["Все"] + groups_list)
-
-    # Запрос клиентов
-    clients_query = '''
-    SELECT 
-        c.id, 
-        c.name, 
-        c.sex, 
-        c.phone, 
-        c.vk_id, 
-        c.tg_id, 
-        COALESCE(g.name, 'Без группы') as group_name,
-        c.first_order_date
-    FROM clients c 
-    LEFT JOIN groups g ON c.group_id = g.id
-    WHERE 1=1
-    '''
-
-    params = []
-
-    if search_query:
-        clients_query += ''' AND (LOWER(c.name) LIKE LOWER(?) OR 
-                                  c.phone LIKE ? OR 
-                                  LOWER(c.vk_id) LIKE LOWER(?) OR 
-                                  LOWER(c.tg_id) LIKE LOWER(?))'''
-        search_pattern = f'%{search_query}%'
-        params.extend([search_pattern] * 4)
-
-    if filter_group != "Все":
-        clients_query += ' AND g.name = ?'
-        params.append(filter_group)
-
-    clients_query += ' ORDER BY c.id DESC'
-    clients_df_data = run_query(clients_query, tuple(params), fetch=True)
-
-    if not clients_df_data.empty:
-        st.info(f"Найдено клиентов: {len(clients_df_data)}")
-        
-        # Создаём копию для отображения с форматированием
-        display_df = clients_df_data.copy()
-        display_df['first_order_date'] = display_df['first_order_date'].apply(format_date_display)
-        display_df['phone'] = display_df['phone'].apply(format_phone)
-        display_df['vk_id'] = display_df['vk_id'].apply(format_vk)
-        display_df['tg_id'] = display_df['tg_id'].apply(format_telegram)
-        
-        # Переименовываем колонки для отображения
-        display_df.columns = ['ID', 'Имя', 'Пол', 'Телефон', 'VK', 'Telegram', 'Группа', 'Первая оплата']
-        
-        # Отображаем таблицу с кликабельными ссылками
-        st.dataframe(
-            display_df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Телефон": st.column_config.TextColumn("Телефон", markdown=True),
-                "VK": st.column_config.TextColumn("VK", markdown=True),
-                "Telegram": st.column_config.TextColumn("Telegram", markdown=True)
-            }
-        )
-        
-        st.markdown("---")
-        
-        # Редактирование клиентов
-        st.markdown("### ✏️ Редактирование клиентов")
-        st.info("📌 Выберите клиента из списка ниже для редактирования. Изменения сохранятся автоматически после редактирования ячейки.")
-
-        # Подготовка данных для редактирования
-        editor_df = clients_df_data.copy()
-        editor_df['first_order_date'] = editor_df['first_order_date'].apply(format_date_display)
-        editor_df['phone_display'] = editor_df['phone'].apply(format_phone)
-        editor_df['vk_display'] = editor_df['vk_id'].apply(format_vk)
-        editor_df['tg_display'] = editor_df['tg_id'].apply(format_telegram)
-
-        # Создаем список выбора клиентов
-        client_options = [f"#{row['id']} {row['name']}" for _, row in editor_df.iterrows()]
-        selected_client = st.selectbox("Выберите клиента для редактирования", client_options, index=None, placeholder="Выберите клиента...")
-
-        if selected_client:
-            # Получаем ID выбранного клиента
-            selected_id = int(selected_client.split("#")[1].split()[0])
-            # Фильтруем таблицу только на выбранную строку
-            selected_row = editor_df[editor_df['id'] == selected_id]
-
-            # Форматируем телефон для редактирования
-            edit_phone = format_phone(selected_row['phone'].iloc[0]).replace("[","").replace("](tel:","").replace(")","")
-
-            # Отображаем редактор только для одной строки
-            edited_clients = st.data_editor(
-                selected_row[['id', 'name', 'sex', 'phone', 'vk_id', 'tg_id', 'group_name', 'first_order_date', 
-                            'phone_display', 'vk_display', 'tg_display']],
-                column_config={
-                    "id": st.column_config.NumberColumn("ID", disabled=True),
-                    "name": st.column_config.TextColumn("Имя"),
-                    "sex": st.column_config.SelectboxColumn("Пол", options=["М", "Ж"]),
-                    "phone": st.column_config.TextColumn("Телефон", mask="+7 999 999-99-99", default=edit_phone),
-                    "vk_id": st.column_config.TextColumn("VK ID", help="Введите только цифры"),
-                    "tg_id": st.column_config.TextColumn("Telegram", help="Введите только юзернейм"),
-                    "group_name": st.column_config.SelectboxColumn("Группа", options=["Без группы"] + groups_list),
-                    "first_order_date": st.column_config.TextColumn("Первая оплата"),
-                    "phone_display": st.column_config.TextColumn("Телефон", disabled=True, markdown=True),
-                    "vk_display": st.column_config.TextColumn("VK", disabled=True, markdown=True),
-                    "tg_display": st.column_config.TextColumn("Telegram", disabled=True, markdown=True),
-                },
-                hide_index=True,
-                use_container_width=True,
-                key="clients_editor"
-            )
-
-            # Сохранение изменений
-            if not edited_clients.equals(selected_row):
-                new_row = edited_clients.iloc[0]
-                
-                # Валидация перед сохранением
-                valid = True
-                if new_row['vk_id'] and not new_row['vk_id'].isdigit():
-                    st.error("VK ID должен содержать только цифры")
-                    valid = False
-                if new_row['tg_id'] and not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*\)', new_row['tg_id']):
-                    st.error("Telegram юзернейм должен начинаться с буквы и содержать только буквы, цифры и подчеркивания")
-                    valid = False
-                
-                if valid:
-                    client_id = int(new_row['id'])
-                    group_name = new_row['group_name']
-                    g_id = group_map.get(group_name) if group_name != "Без группы" else None
-                    first_order = parse_date_to_db(new_row['first_order_date'])
-                    
-                    # Нормализуем данные перед сохранением
-                    phone = normalize_phone(new_row['phone'])
-                    vk = normalize_vk(new_row['vk_id'])
-                    tg = normalize_tg(new_row['tg_id'])
-                    
                     run_query('''
-                        UPDATE clients 
-                        SET name=?, sex=?, phone=?, vk_id=?, tg_id=?, group_id=?, first_order_date=?
-                        WHERE id=?
-                    ''', (
-                        new_row['name'],
-                        new_row['sex'],
-                        phone,
-                        vk,
-                        tg,
-                        g_id,
-                        first_order,
-                        client_id
-                    ))
-                    st.success("✅ Изменения сохранены!")
+                        INSERT INTO clients (name, sex, phone, vk_id, tg_id, group_id)
+                        VALUES (?,?,?,?,?,?)
+                    ''', (c_name, c_sex, phone, vk, tg, g_id))
+
+                    st.success("✅ Клиент добавлен")
                     st.rerun()
+                else:
+                    st.error("Введите имя клиента")
+
+    # Отображение таблицы клиентов
+    clients = run_query('''
+        SELECT c.id, c.name, c.sex, c.phone, c.vk_id, c.tg_id, COALESCE(g.name, 'Без группы') as group_name, c.first_order_date
+        FROM clients c
+        LEFT JOIN groups g ON c.group_id = g.id
+        ORDER BY c.id DESC
+    ''', fetch=True)
+
+    if not clients.empty:
+        display_df = clients.copy()
+
+        # Форматирование даты
+        display_df['first_order_date'] = display_df['first_order_date'].apply(format_date_display)
+
+        # Форматированный телефон как ссылка tel:...
+        display_df['phone'] = display_df['phone'].apply(
+            lambda x: f"[{format_phone(x)}](tel:+{''.join(filter(str.isdigit, x))})" if x else ""
+        )
+
+        # VK — ссылка
+        display_df['vk_id'] = display_df['vk_id'].apply(
+            lambda x: f"[vk.com/{x}](https://vk.com/{x})" if x else ""
+        )
+
+        # Telegram — ссылка
+        display_df['tg_id'] = display_df['tg_id'].apply(
+            lambda x: f"[t.me/{x}](https://t.me/{x})" if x else ""
+        )
+
+        # Переименовываем для таблицы
+        display_df.columns = ['ID', 'Имя', 'Пол', 'Телефон', 'VK', 'Telegram', 'Группа', 'Первая оплата']
+
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+
     else:
-        st.info("Клиенты не найдены")
+        st.info("Клиенты пока не добавлены")
 
 # --- 2. ПРАЙС-ЛИСТ ---
 elif choice == "Прайс-лист Услуг":
@@ -504,23 +291,27 @@ elif choice == "Прайс-лист Услуг":
         
         st.dataframe(display_services, use_container_width=True, hide_index=True)
         
-        # Редактирование услуг
-        st.markdown("### ✏️ Редактирование услуг")
-        st.info("📌 Выберите услугу из списка ниже для редактирования. Изменения сохранены автоматически после редактирования ячейки.")
-
-        # Создаем список выбора услуг
+        st.markdown("---")
+        
+        # Редактирование услуг с выбором строки
+        st.markdown("### ✏️ Редактирование услуги")
+        
+        # Создаём список для выбора
         service_options = [f"#{row['id']} {row['name']}" for _, row in services_df.iterrows()]
-        selected_service = st.selectbox("Выберите услугу для редактирования", service_options, index=None, placeholder="Выберите услугу...")
-
+        selected_service = st.selectbox("Выберите услугу для редактирования", service_options, key="service_select")
+        
         if selected_service:
             # Получаем ID выбранной услуги
-            selected_id = int(selected_service.split("#")[1].split()[0])
-            # Фильтруем таблицу только на выбранную строку
-            selected_row = services_df[services_df['id'] == selected_id]
-
-            # Отображаем редактор только для одной строки
-            edited_services = st.data_editor(
-                selected_row,
+            selected_id = int(selected_service.split()[0][1:])
+            selected_row = services_df[services_df['id'] == selected_id].iloc[0]
+            
+            # Создаём таблицу с одной строкой
+            edit_df = pd.DataFrame([selected_row])
+            
+            st.info(f"Редактирование: #{selected_id} {selected_row['name']}")
+            
+            edited_service = st.data_editor(
+                edit_df,
                 column_config={
                     "id": st.column_config.NumberColumn("ID", disabled=True),
                     "name": st.column_config.TextColumn("Услуга"),
@@ -529,11 +320,11 @@ elif choice == "Прайс-лист Услуг":
                 },
                 hide_index=True,
                 use_container_width=True,
-                key="services_editor"
+                key="single_service_editor"
             )
             
-            if not edited_services.equals(selected_row):
-                new_row = edited_services.iloc[0]
+            if not edited_service.equals(edit_df):
+                new_row = edited_service.iloc[0]
                 run_query('''
                     UPDATE services_catalog 
                     SET name=?, min_price=?, description=?
@@ -542,7 +333,7 @@ elif choice == "Прайс-лист Услуг":
                     new_row['name'],
                     new_row['min_price'],
                     new_row['description'],
-                    int(new_row['id'])
+                    selected_id
                 ))
                 st.success("✅ Изменения сохранены!")
                 st.rerun()
@@ -652,30 +443,31 @@ elif choice == "Заказы":
         
         st.dataframe(display_orders, use_container_width=True, hide_index=True)
         
-        # Редактирование заказов
-        st.markdown("### ✏️ Редактирование заказов")
-        st.info("📌 Выберите заказ из списка ниже для редактирования. Изменения сохранены автоматически после редактирования ячейки.")
-
-        # Подготовка данных для редактирования
-        editor_df = orders_df[['id', 'client_id', 'client_name', 'execution_date', 'status', 'total_amount']].copy()
-        editor_df['execution_date'] = editor_df['execution_date'].apply(format_date_display)
-        editor_df['total_display'] = editor_df['total_amount'].apply(lambda x: f"{format_currency(x)} ₽")
-
-        # Создаем список выбора заказов
-        order_options = [f"#{row['id']} {row['client_name']}" for _, row in editor_df.iterrows()]
-        selected_order = st.selectbox("Выберите заказ для редактирования", order_options, index=None, placeholder="Выберите заказ...")
-
+        st.markdown("---")
+        
+        # Редактирование заказов с выбором строки
+        st.markdown("### ✏️ Редактирование заказа")
+        
+        # Создаём список для выбора
+        order_options = [f"#{row['id']} {row['client_name']}" for _, row in orders_df.iterrows()]
+        selected_order = st.selectbox("Выберите заказ для редактирования", order_options, key="order_select")
+        
         if selected_order:
             # Получаем ID выбранного заказа
-            selected_id = int(selected_order.split("#")[1].split()[0])
-            # Фильтруем таблицу только на выбранную строку
-            selected_row = editor_df[editor_df['id'] == selected_id]
-
-            # Отображаем редактор только для одной строки
-            edited_orders = st.data_editor(
-                selected_row,
+            selected_id = int(selected_order.split()[0][1:])
+            selected_row = orders_df[orders_df['id'] == selected_id].iloc[0]
+            
+            # Создаём таблицу с одной строкой
+            edit_df = orders_df[orders_df['id'] == selected_id][['id', 'client_id', 'client_name', 'execution_date', 'status', 'total_amount']].copy()
+            edit_df['execution_date'] = edit_df['execution_date'].apply(format_date_display)
+            
+            st.info(f"Редактирование: Заказ #{selected_id} {selected_row['client_name']}")
+            
+            edited_order = st.data_editor(
+                edit_df,
                 column_config={
                     "id": st.column_config.NumberColumn("ID", disabled=True),
+                    "client_id": st.column_config.NumberColumn("ID клиента", disabled=True),
                     "client_name": st.column_config.SelectboxColumn(
                         "Клиент",
                         options=client_names,
@@ -687,18 +479,15 @@ elif choice == "Заказы":
                         options=STATUS_LIST,
                         required=True
                     ),
-                    "total_amount": st.column_config.TextColumn("Сумма", disabled=True),
-                    "total_display": st.column_config.TextColumn("Сумма", disabled=True)
+                    "total_amount": st.column_config.NumberColumn("Сумма", disabled=True)
                 },
                 hide_index=True,
                 use_container_width=True,
-                key="orders_editor"
+                key="single_order_editor"
             )
 
-            # Сохранение изменений
-            if not edited_orders.equals(selected_row):
-                new_row = edited_orders.iloc[0]
-                order_id = int(new_row['id'])
+            if not edited_order.equals(edit_df):
+                new_row = edited_order.iloc[0]
                 client_id = client_map.get(new_row['client_name'])
                 exec_date = parse_date_to_db(new_row['execution_date'])
                 
@@ -706,8 +495,8 @@ elif choice == "Заказы":
                     UPDATE orders 
                     SET client_id=?, execution_date=?, status=?
                     WHERE id=?
-                ''', (client_id, exec_date, new_row['status'], order_id))
-        
+                ''', (client_id, exec_date, new_row['status'], selected_id))
+                
                 st.success("✅ Изменения сохранены!")
                 st.rerun()
     else:
@@ -724,7 +513,7 @@ elif choice == "Детализация Заказа":
 
     if not orders_df.empty:
         orders_df['label'] = orders_df.apply(
-            lambda x: f"Заказ #{x['id']} - {x['name']} ({format_date_display(x['execution_date'])})", 
+            lambda x: f"#{x['id']} {x['name']} ({format_date_display(x['execution_date'])})", 
             axis=1
         )
         order_selection = st.selectbox("Выберите заказ", orders_df['label'])
@@ -806,24 +595,25 @@ elif choice == "Детализация Заказа":
                 total_amount = items_df['amount'].sum()
                 st.success(f"💰 **Итого:** {format_currency(total_amount)} ₽")
                 
-                # Редактирование услуг
                 st.markdown("---")
-                st.markdown("#### ✏️ Редактирование услуг")
-                st.info("📌 Выберите услугу из списка ниже для редактирования. Изменения сохранены автоматически после редактирования ячейки.")
-
-                # Создаем список выбора услуг в заказе
-                item_options = [f"#{row['id']} {row['service_name']}" for _, row in items_df.iterrows()]
-                selected_item = st.selectbox("Выберите услугу для редактирования", item_options, index=None, placeholder="Выберите услугу...")
-
+                st.markdown("#### ✏️ Редактирование услуги")
+                
+                # Создаём список для выбора
+                item_options = [f"#{row['id']} {row['service_name']} ({format_date_display(row['payment_date'])})" 
+                               for _, row in items_df.iterrows()]
+                selected_item = st.selectbox("Выберите услугу для редактирования", item_options, key="item_select")
+                
                 if selected_item:
                     # Получаем ID выбранной услуги
-                    selected_id = int(selected_item.split("#")[1].split()[0])
-                    # Фильтруем таблицу только на выбранную строку
-                    selected_row = items_df[items_df['id'] == selected_id]
-
-                    # Отображаем редактор только для одной строки
-                    edited_items = st.data_editor(
-                        selected_row,
+                    selected_id = int(selected_item.split()[0][1:])
+                    
+                    # Создаём таблицу с одной строкой
+                    edit_df = items_df[items_df['id'] == selected_id].copy()
+                    
+                    st.info(f"Редактирование: {selected_item}")
+                    
+                    edited_item = st.data_editor(
+                        edit_df,
                         column_config={
                             "id": st.column_config.NumberColumn("ID", disabled=True),
                             "service_name": st.column_config.SelectboxColumn(
@@ -837,13 +627,11 @@ elif choice == "Детализация Заказа":
                         },
                         hide_index=True,
                         use_container_width=True,
-                        key="items_editor"
+                        key="single_item_editor"
                     )
 
-                    # Сохранение изменений
-                    if not edited_items.equals(selected_row):
-                        new_row = edited_items.iloc[0]
-                        item_id = int(new_row['id'])
+                    if not edited_item.equals(edit_df):
+                        new_row = edited_item.iloc[0]
                         payment_date_val = parse_date_to_db(new_row['payment_date'])
                         amount_val = float(new_row['amount'])
                         hours_val = float(new_row['hours'])
@@ -857,24 +645,24 @@ elif choice == "Детализация Заказа":
                             payment_date_val,
                             amount_val,
                             hours_val,
-                            item_id
+                            selected_id
                         ))
-                
-                    # Обновляем сумму заказа
-                    total_res = run_query(
-                        "SELECT SUM(amount) as total FROM order_items WHERE order_id=?",
-                        (order_id,),
-                        fetch=True
-                    )
-                    total = total_res['total'].iloc[0] if not total_res.empty and total_res['total'].iloc[0] else 0.0
-                    run_query("UPDATE orders SET total_amount=? WHERE id=?", (total, order_id))
-                    
-                    # Обновляем first_order_date клиента
-                    if current_client_id:
-                        update_client_first_order_date(current_client_id)
-                    
-                    st.success("✅ Изменения сохранены!")
-                    st.rerun()
+                        
+                        # Обновляем сумму заказа
+                        total_res = run_query(
+                            "SELECT SUM(amount) as total FROM order_items WHERE order_id=?",
+                            (order_id,),
+                            fetch=True
+                        )
+                        total = total_res['total'].iloc[0] if not total_res.empty and total_res['total'].iloc[0] else 0.0
+                        run_query("UPDATE orders SET total_amount=? WHERE id=?", (total, order_id))
+                        
+                        # Обновляем first_order_date клиента
+                        if current_client_id:
+                            update_client_first_order_date(current_client_id)
+                        
+                        st.success("✅ Изменения сохранены!")
+                        st.rerun()
             else:
                 st.info("В этом заказе пока нет услуг")
     else:
