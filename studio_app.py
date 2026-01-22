@@ -273,31 +273,32 @@ if choice == "Клиенты и Группы":
             
                     if st.form_submit_button("Сохранить клиента"):
                         if c_name:
-                           if not c_phone_raw:
-                              st.error("Введите номер телефона")
-                           else:
-                              # 👇 ОЧИСТКА МАСКИРОВАННОГО НОМЕРА
-                              import re
-                              clean_digits = re.sub(r'\D', '', c_phone_raw)
-                              if len(clean_digits) == 11 and clean_digits.startswith("7"):
-                                  c_phone_raw = clean_digits[1:]  # сохраняем только 10 цифр
-                              else:
-                                  st.error("🚫 Номер телефона должен содержать 11 цифр и начинаться с +7")
-                                  st.stop()  # остановим выполнение
+                            if not c_phone_raw:
+                                st.error("Введите номер телефона")
+                            else:
+                                # 👇 ОЧИСТКА МАСКИРОВАННОГО НОМЕРА
+                                import re
+                                clean_digits = re.sub(r'\D', '', c_phone_raw)
+                                if len(clean_digits) == 11 and clean_digits.startswith("7"):
+                                    c_phone_raw = clean_digits[1:]  # сохраняем только 10 цифр
+                                else:
+                                    st.error("🚫 Номер телефона должен содержать 11 цифр и начинаться с +7")
+                                    st.stop()  # остановим выполнение
+
                             # Сохраняем сырые данные (без форматирования)
                             phone = c_phone_raw if c_phone_raw else ""
                             vk = c_vk_raw if c_vk_raw else ""
                             tg = c_tg_raw if c_tg_raw else ""
                             g_id = group_map.get(c_group) if c_group != "Без группы" else None
-                    
+
                             run_query('''INSERT INTO clients 
                                 (name, sex, phone, vk_id, tg_id, group_id) 
                                 VALUES (?,?,?,?,?,?)''', 
                                 (c_name, c_sex, phone, vk, tg, g_id))
                             st.success("✅ Клиент добавлен!")
                             st.rerun()
-                        else:
-                            st.error("Введите имя клиента")
+    else:
+        st.error("Введите имя клиента")
 
 
         elif action in ["Редактировать", "Удалить"]:
