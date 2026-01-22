@@ -634,7 +634,6 @@ elif choice == "Прайс-лист Услуг":
     else:
         st.info("Пока нет ни одной услуги.")
 
-# --- 3. ЗАКАЗЫ ---
 # --- 3. ЗАКАЗЫ И УСЛУГИ (НОВАЯ ВЕРСИЯ) ---
 elif choice == "Заказы и услуги":
     st.subheader("Заказы и услуги")
@@ -873,79 +872,6 @@ def _update_order_total(order_id):
     total = run_query("SELECT COALESCE(SUM(amount), 0) as total FROM order_items WHERE order_id=?", (order_id,), fetch=True)
     total_sum = total.iloc[0]['total']
     run_query("UPDATE orders SET total_amount=? WHERE id=?", (total_sum, order_id))
-
-        # 5. Кнопка основного действия с заказом
-
-        if order_action == "Добавить":
-            if st.button("Создать заказ", type="primary", disabled=not client_names):
-                c_id = client_map[selected_client]
-                run_query("INSERT INTO orders (client_id, execution_date, status) VALUES (?,?,?)",
-                          (c_id, execution_date.strftime("%Y-%m-%d"), order_status))
-                selected_order_id = run_query("SELECT last_insert_rowid() FROM orders", fetch=True).iloc[0][0]
-                st.success(f"✅ Заказ #{selected_order_id} создан!")
-                st.rerun()
-
-        elif order_action == "Редактировать" and selected_order_id:
-            if st.button("💾 Сохранить изменения заказа", type="primary"):
-                date_exec = parse_date_to_db(execution_date)
-                client_id = client_map[selected_client]
-
-                run_query('''
-                    UPDATE orders SET client_id=?, execution_date=?, status=? WHERE id=?
-                ''', (client_id, date_exec, order_status, selected_order_id))
-                st.success("✅ Заказ обновлён!")
-                st.rerun()
-
-        elif order_action == "Удалить" and selected_order_id:
-            if st.button("🗑️ Удалить заказ", type="primary"):
-                run_query("DELETE FROM orders WHERE id=?", (selected_order_id,))
-                st.success("✅ Заказ удалён!")
-                st.rerun()
-
-    # --- Правая колонка: Состав заказа ---
-    with right_col:
-        st.markdown("### 🧾 Состав заказа")
-        total_sum = 0
-
-        if selected_order_id:
-            items_df = run_query(
-                "SELECT id, service_name, payment_date, amount, hours FROM order_items WHERE order_id=?",
-                (selected_order_id,), fetch=True
-            )
-
-            if not items_df.empty:
-                detail_df = items_df.copy()
-                detail_df['payment_date'] = detail_df['payment_date'].apply(format_date_display)
-                detail_df['amount'] = detail_df['amount'].apply(lambda x: f"{format_currency(x)} ₽")
-                detail_df['hours'] = detail_df['hours'].apply(lambda x: f"{float(x):.1f}" if pd.notna(x) else "0.0")
-
-                st.dataframe(
-                    detail_df.rename(columns={
-                        "service_name": "Услуга",
-                        "payment_date": "Дата оплаты",
-                        "amount": "Сумма",
-                        "hours": "Часы"
-                    }),
-                    use_container_width=True,
-                    hide_index=True
-                )
-
-                # Подсчет итоговой суммы
-                total_sum = run_query(
-                    "SELECT SUM(amount) as total FROM order_items WHERE order_id=?",
-                    (selected_order_id,), fetch=True
-                )["total"].iloc[0] or 0
-                run_query("UPDATE orders SET total_amount=? WHERE id=?", (total_sum, selected_order_id))
-
-                # Обновление даты первого заказа клиента
-                cur_client_id = run_query("SELECT client_id FROM orders WHERE id=?", (selected_order_id,), fetch=True).iloc[0]["client_id"]
-                update_client_first_order_date(cur_client_id)
-
-                st.markdown(f"### 🧮 Итого: **{format_currency(total_sum)} ₽**")
-            else:
-                st.info("📭 В заказе пока нет услуг")
-        else:
-            st.info("📌 Выберите или создайте заказ для просмотра его состава")
 
 # --- 5. ОТЧЁТЫ ---
 elif choice == "ОТЧЁТЫ":
