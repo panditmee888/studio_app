@@ -221,34 +221,32 @@ if choice == "Клиенты и Группы":
 
         if action == "Добавить":
             with st.form("add_client"):
-                # 👇 Часть 1 — Имя и Пол — в одной строке
-                col1, col2 = st.columns([2,1])
+                # 👇 Часть 1 — Имя, Пол, Группа — в одной строке
+                col1, col2, col3 = st.columns([3,1,2])
                 with col1:
                     c_name = st.text_input("Имя *", placeholder="Иван Иванов")
                 with col2:
                     c_sex = st.selectbox("Пол", ["М", "Ж"])
-        
-                # 👇 Часть 2 — Телефон (на отдельной строке)
-                c_phone_raw = st.text_input(
+                with col3:
+                    if groups_list:
+                        c_group = st.selectbox("Группа", options=["Без группы"] + groups_list)
+                    else:
+                        c_group = "Без группы"
+                        st.info("Группы еще не созданы")
+
+                # 👇 Часть 2 — Телефон, VK и Telegram в одну строку
+                col4, col5, col6 = st.columns(2)
+                with col4:
+                    c_phone_raw = st.text_input(
                     "Телефон", 
                     placeholder="Введите номер телефона",
                     help="Введите номер в любом формате. Сохраняется как 7XXXXXXXXXX, отображается с маской."
                 )
-        
-                # 👇 Часть 3 — VK и Telegram в одну строку
-                col3, col4 = st.columns(2)
-                with col3:
+                with col5:
                     c_vk_raw = st.text_input("VK ID", placeholder="id123456 или username")
-                with col4:
+                with col6:
                     c_tg_raw = st.text_input("Telegram", placeholder="username (без @)")
-        
-                # 👇 Часть 4 — Группа
-                if groups_list:
-                    c_group = st.selectbox("Группа", options=["Без группы"] + groups_list)
-                else:
-                    c_group = "Без группы"
-                    st.info("Группы еще не созданы")
-        
+                
                 # 👇 Кнопка
                 if st.form_submit_button("Сохранить клиента"):
                     if c_name:
