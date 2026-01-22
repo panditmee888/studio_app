@@ -466,82 +466,89 @@ if choice == "Клиенты и Группы":
 
 # --- 2. ПРАЙС-ЛИСТ ---
 elif choice == "Прайс-лист Услуг":
-    st.subheader("Справочник Услуг")
+    st.subheader("📦 Прайс-лист Услуг")
 
-    with st.expander("➕ Добавить новую услугу"):
-        with st.form("add_service"):
-            s_name = st.text_input("Наименование услуги")
-            s_price_str = st.text_input("Мин. прайс ₽", placeholder="10 000")
-            s_desc = st.text_area("Описание")
-            
-            if st.form_submit_button("Добавить услугу"):
-                if s_name:
-                    s_price = parse_currency(s_price_str)
-                    run_query("INSERT INTO services_catalog (name, min_price, description) VALUES (?,?,?)", 
-                              (s_name, s_price, s_desc))
-                    st.success("Услуга добавлена")
-                    st.rerun()
+    services_df = run_query("SELECT * FROM services_catalog ORDER BY id DESC", fetch=True)
 
+    with st.expander("➕ Управление услугами"):
+        action = st.radio("Выберите действие", ["Добавить", "Редактировать", "Удалить"], horizontal=True)
+
+        if action == "Добавить":
+            with st.form("add_service_form"):
+                s_name = st.text_input("Название услуги")
+                s_price = st.text_input("Мин. прайс ₽", placeholder="Например, 10 000")
+                s_desc = st.text_area("Описание")
+
+                if st.form_submit_button("Добавить услугу"):
+                    if s_name.strip():
+                        price = parse_currency(s_price)
+                        run_query(
+                            "INSERT INTO services_catalog (name, min_price, description) VALUES (?,?,?)",
+                            (s_name.strip(), price, s_desc.strip())
+                        )
+                        st.success("✅ Услуга добавлена")
+                        st.rerun()
+                    else:
+                        st.error("Название услуги обязательно")
+
+        elif action in ["Редактировать", "Удалить"]:
+            if services_df.empty:
+                st.warning("Нет доступных услуг для выбранного действия.")
+            else:
+                service_options = [f"#{row['id']} {row['name']}" for _, row in services_df.iterrows()]
+                selected_service = st.selectbox("Выберите услугу", service_options, key="edit_service_select")
+
+                selected_id = int(selected_service.split()[0][1:])
+                selected_row = services_df[services_df['id'] == selected_id].iloc[0]
+
+                edit_df = pd.DataFrame([selected_row])
+
+                st.markdown(f"**{action} услугу со следующими параметрами:**")
+
+                edited_row = st.data_editor(
+                    edit_df,
+                    hide_index=True,
+                    column_config={
+                        "id": st.column_config.NumberColumn("ID", disabled=True),
+                        "name": st.column_config.TextColumn("Название"),
+                        "min_price": st.column_config.NumberColumn("Мин. прайс ₽", format="%.0f"),
+                        "description": st.column_config.TextColumn("Описание")
+                    },
+                    use_container_width=True,
+                    key="service_editor"
+                )
+
+                if action == "Редактировать":
+                    if not edited_row.equals(edit_df):
+                        new_row = edited_row.iloc[0]
+                        run_query('''
+                            UPDATE services_catalog 
+                            SET name=?, min_price=?, description=?
+                            WHERE id=?
+                        ''', (
+                            new_row['name'],
+                            new_row['min_price'],
+                            new_row['description'],
+                            selected_id
+                        ))
+                        st.success("✅ Изменения сохранены!")
+                        st.rerun()
+
+                elif action == "Удалить":
+                    if st.button("🗑️ Подтвердить удаление"):
+                        run_query("DELETE FROM services_catalog WHERE id=?", (selected_id,))
+                        st.success("✅ Услуга удалена")
+                        st.rerun()
+
+    st.markdown("### 📋 Список всех услуг")
     services_df = run_query("SELECT * FROM services_catalog", fetch=True)
-
     if not services_df.empty:
-        # Форматируем цену для отображения
-        display_services = services_df.copy()
-        display_services['min_price'] = display_services['min_price'].apply(lambda x: f"{format_currency(x)} ₽")
-        
-        # Переименовываем колонки
-        display_services.columns = ['ID', 'Услуга', 'Мин. прайс', 'Описание']
-        
-        st.dataframe(display_services, use_container_width=True, hide_index=True)
-        
-        st.markdown("---")
-        
-        # Редактирование услуг с выбором строки
-        st.markdown("### ✏️ Редактирование услуги")
-        
-        # Создаём список для выбора
-        service_options = [f"#{row['id']} {row['name']}" for _, row in services_df.iterrows()]
-        selected_service = st.selectbox("Выберите услугу для редактирования", service_options, key="service_select")
-        
-        if selected_service:
-            # Получаем ID выбранной услуги
-            selected_id = int(selected_service.split()[0][1:])
-            selected_row = services_df[services_df['id'] == selected_id].iloc[0]
-            
-            # Создаём таблицу с одной строкой
-            edit_df = pd.DataFrame([selected_row])
-            
-            st.info(f"Редактирование: #{selected_id} {selected_row['name']}")
-            
-            edited_service = st.data_editor(
-                edit_df,
-                column_config={
-                    "id": st.column_config.NumberColumn("ID", disabled=True),
-                    "name": st.column_config.TextColumn("Услуга"),
-                    "min_price": st.column_config.NumberColumn("Мин. прайс ₽", format="%.0f"),
-                    "description": st.column_config.TextColumn("Описание")
-                },
-                hide_index=True,
-                use_container_width=True,
-                key="single_service_editor"
-            )
-            
-            if not edited_service.equals(edit_df):
-                new_row = edited_service.iloc[0]
-                run_query('''
-                    UPDATE services_catalog 
-                    SET name=?, min_price=?, description=?
-                    WHERE id=?
-                ''', (
-                    new_row['name'],
-                    new_row['min_price'],
-                    new_row['description'],
-                    selected_id
-                ))
-                st.success("✅ Изменения сохранены!")
-                st.rerun()
+        disp_df = services_df.copy()
+        disp_df['min_price'] = disp_df['min_price'].apply(lambda x: f"{format_currency(x)} ₽")
+        disp_df.columns = ['ID', 'Название', 'Мин. прайс', 'Описание']
+        st.dataframe(disp_df, use_container_width=True, hide_index=True)
     else:
-        st.info("Услуги еще не добавлены")
+        st.info("Пока нет ни одной услуги.")
 
 # --- 3. ЗАКАЗЫ ---
 elif choice == "Заказы":
