@@ -8,10 +8,6 @@ import re
 STATUS_LIST = ["В работе", "Ожидает оплаты", "Выполнен", "Оплачен"]
 
 # --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
-@st.cache_data(ttl=30)
-def load_groups():
-    return run_query("SELECT id, name FROM groups ORDER BY id DESC", fetch=True)
-
 def format_phone(phone_str):
     """
     Форматирование номера: 7XXXXXXXXXX → +7 (XXX) XXX-XX-XX
@@ -347,68 +343,63 @@ if choice == "Клиенты и Группы":
                         st.success("✅ Клиент удалён")
                         st.rerun()
 
-    # --- Управление группами ---
+    # Управление группами
     with st.expander("🏷️ Управление группами", expanded=False):
-        # Выбор действия
-        col_action_l, col_action_r = st.columns([2, 3])
-        with col_action_l:
+        # ✅ Делаем надписи действий идентичными с клиентами
+        col3, col4 = st.columns([2, 3])
+        
+        with col3:
             action = st.radio("Выберите действие", ["Добавить", "Редактировать", "Удалить"], horizontal=True, key="group_action_radio")
-        with col_action_r:
-            st.markdown("#### 📋 Список всех групп")
-            groups_df = load_groups()
-            if not groups_df.empty:
-                display_df = groups_df.copy()
-                display_df.columns = ["ID", "Название группы"]
-                st.dataframe(display_df, use_container_width=True, hide_index=True)
-            else:
-                st.info("Пока нет групп.")
-    
-        groups_df = load_groups()  # (можно повторить — кеш используется)
-    
-        # Две колонки общей работы
-        col_l, col_r = st.columns([2, 3])
-    
-        # --- ДОБАВИТЬ ---
+        with col4:
+            st.markdown("#### 📋 Список существующих групп")
+        # Загружаем актуальный список групп
+        groups_df = run_query("SELECT id, name FROM groups ORDER BY id DESC", fetch=True)
+
         if action == "Добавить":
-            with col_l:
-                with st.form("add_group_form"):
-                    new_group_name = st.text_input("Название группы *", placeholder="Например: Постоянные, VIP")
-    
+            col1, col2 = st.columns([2, 3])
+            
+            with col1:
+                with st.form("add_group"):
+                    new_group_name = st.text_input("Название группы *", placeholder="Например: VIP, Новые клиенты")
+            
+                    # ✅ Делаем кнопку идентичной с клиентами, без цветового выделения
                     if st.form_submit_button("Сохранить группу"):
                         if new_group_name.strip():
-                            check = run_query("SELECT id FROM groups WHERE name=?", (new_group_name.strip(),), fetch=True)
-                            if not check.empty:
+                            # Проверяем уникальность названия
+                            check_exists = run_query("SELECT id FROM groups WHERE name=?", (new_group_name.strip(),), fetch=True)
+                            if not check_exists.empty:
                                 st.error("❌ Группа с таким названием уже существует")
                             else:
                                 run_query("INSERT INTO groups (name) VALUES (?)", (new_group_name.strip(),))
-                                st.toast("✅ Группа добавлена!", icon="✅")
-                                st.cache_data.clear()  # обнуляем кэш
-                                st.session_state["group_rerun"] = True
+                                st.success("✅ Группа добавлена!")
+                                st.rerun()
                         else:
-                            st.warning("Введите название группы")
-    
-            # Отображаем список справа (в col_r)
-            with col_r:
-                groups_display = groups_df.copy()
-                groups_display.columns = ['ID', 'Название группы']
-                st.dataframe(groups_display, use_container_width=True, hide_index=True)
-    
-        # --- РЕДАКТИРОВАТЬ / УДАЛИТЬ ---
-        elif action in ["Редактировать", "Удалить"]:
-            with col_l:
-                if groups_df.empty:
-                    st.info("Нет групп для действия.")
+                            st.error("❌ Введите название группы")
+            with col2:
+                if not groups_df.empty:
+                    groups_display = groups_df.copy()
+                    groups_display.columns = ['ID', 'Название группы']
+                    st.dataframe(groups_display, use_container_width=True, hide_index=True)
                 else:
+                    st.info("Группы пока не добавлены")
+
+        elif action in ["Редактировать", "Удалить"]:
+            if groups_df.empty:
+                st.info("Нет групп для действия.")
+            else:
+                col_left, col_right = st.columns([2, 3])
+        
+                with col_left:
                     group_options = [f"#{row['id']} {row['name']}" for _, row in groups_df.iterrows()]
                     selected_group = st.selectbox("Выберите группу", group_options, key="group_select")
-    
+        
                     if selected_group:
                         selected_id = int(selected_group.split()[0][1:])
                         selected_row = groups_df[groups_df['id'] == selected_id].iloc[0]
                         edit_df = pd.DataFrame([selected_row])
-    
+        
                         if action == "Редактировать":
-                            edited = st.data_editor(
+                            edited_group = st.data_editor(
                                 edit_df,
                                 column_config={
                                     "id": st.column_config.NumberColumn("ID", disabled=True),
@@ -416,48 +407,50 @@ if choice == "Клиенты и Группы":
                                 },
                                 hide_index=True,
                                 use_container_width=True,
-                                key="group_editor"
+                                key="single_group_editor"
                             )
-    
-                            if not edited.equals(edit_df):
-                                new_name = edited.iloc[0]["name"].strip()
+        
+                            if not edited_group.equals(edit_df):
+                                new_row = edited_group.iloc[0]
+                                new_name = new_row['name'].strip()
+        
                                 if not new_name:
-                                    st.error("❌ Название не может быть пустым")
+                                    st.error("❌ Название группы не может быть пустым")
                                 else:
-                                    exists = run_query("SELECT id FROM groups WHERE name=? AND id!=?", (new_name, selected_id), fetch=True)
-                                    if not exists.empty:
-                                        st.error("❌ Такое название уже есть")
+                                    check_exists = run_query(
+                                        "SELECT id FROM groups WHERE name = ? AND id != ?",
+                                        (new_name, selected_id), fetch=True
+                                    )
+                                    if not check_exists.empty:
+                                        st.error("❌ Группа с таким названием уже существует")
                                     else:
                                         run_query("UPDATE groups SET name=? WHERE id=?", (new_name, selected_id))
-                                        st.toast("✅ Группа обновлена!", icon="✅")
-                                        st.cache_data.clear()
-                                        st.session_state["group_rerun"] = True
-    
+                                        st.success("✅ Изменения сохранены!")
+                                        st.rerun()
+        
                         elif action == "Удалить":
-                            st.warning(f"Вы собираетесь удалить группу: **{selected_row['name']}**")
-                            clients_check = run_query("SELECT COUNT(*) as count FROM clients WHERE group_id=?", (selected_id,), fetch=True)
+                            st.warning(f"⚠️ Вы собираетесь удалить группу: **{selected_row['name']}**")
+                            clients_check = run_query(
+                                "SELECT COUNT(*) as count FROM clients WHERE group_id=?", 
+                                (selected_id,), fetch=True
+                            )
                             has_clients = clients_check.iloc[0]["count"] > 0 if not clients_check.empty else False
-    
+        
                             if has_clients:
-                                st.error("❌ В группе есть клиенты. Удаление невозможно.")
+                                st.error("❌ Нельзя удалить группу с клиентами! Сначала переведите их в другую группу")
                             else:
-                                if st.button("🗑️ Подтвердить удаление группы"):
+                                if st.button("🗑️ Подтвердить удаление"):
                                     run_query("DELETE FROM groups WHERE id=?", (selected_id,))
-                                    st.toast("✅ Группа удалена!", icon="🧹")
-                                    st.cache_data.clear()
-                                    st.session_state["group_rerun"] = True
-    
-            # Таблица групп — всегда в правой колонке
-            #with col_r:
-               # groups_display = groups_df.copy()
-               # groups_display.columns = ['ID', 'Название группы']
-               # st.dataframe(groups_display, use_container_width=True, hide_index=True)
-    
-    # 👈 После всех блоков — если сработал флаг, перезагрузить
-    if st.session_state.get("group_rerun"):
-        del st.session_state["group_rerun"]
-        st.rerun()
-
+                                    st.success("✅ Группа удалена!")
+                                    st.rerun()
+        
+                with col_right:
+                    if not groups_df.empty:
+                        groups_display = groups_df.copy()
+                        groups_display.columns = ['ID', 'Название группы']
+                        st.dataframe(groups_display, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Группы пока не добавлены")
 
     # Поиск и фильтрация
     st.markdown("### 🔍 Поиск и фильтрация")
