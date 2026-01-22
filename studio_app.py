@@ -403,15 +403,16 @@ if choice == "Клиенты и Группы":
     params = []
 
     if search_query:
+        search_pattern = f"%{search_query}%"
         clients_query += ''' AND (LOWER(c.name) LIKE LOWER(?) OR 
                                   c.phone LIKE ? OR 
                                   LOWER(c.vk_id) LIKE LOWER(?) OR 
                                   LOWER(c.tg_id) LIKE LOWER(?))'''
-        search_pattern = f"%{search_query.lower()}%"
+        
         params.extend([search_pattern] * 4)
 
     if filter_group != "Все":
-        clients_query += ' AND g.name = ?'
+        clients_query += ' AND LOWER(g.name) = LOWER(?)'
         params.append(filter_group)
 
     clients_query += ' ORDER BY c.id DESC'
