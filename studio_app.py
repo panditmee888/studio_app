@@ -875,7 +875,7 @@ def _update_order_total(order_id):
     run_query("UPDATE orders SET total_amount=? WHERE id=?", (total_sum, order_id))
 
         # 5. Кнопка основного действия с заказом
-        st.markdown("---")
+
         if order_action == "Добавить":
             if st.button("Создать заказ", type="primary", disabled=not client_names):
                 c_id = client_map[selected_client]
