@@ -333,7 +333,7 @@ if choice == "Клиенты и Группы":
     if not clients_df_data.empty:
         st.info(f"Найдено клиентов: {len(clients_df_data)}")
         
-        display_df = clients.copy()
+        display_df = clients_df_data.copy()
 
         display_df['Телефон'] = display_df['phone'].apply(
             lambda x: f"tel:+{''.join(filter(str.isdigit, str(x)))}" if x else None
