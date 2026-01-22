@@ -124,6 +124,12 @@ def update_client_first_order_date(client_id):
             "UPDATE clients SET first_order_date = ? WHERE id = ?",
             (result['first_payment'].iloc[0], client_id)
         )
+        
+# Вспомогательная функция пересчёта суммы заказа
+def _update_order_total(order_id):
+    total_df = run_query("SELECT COALESCE(SUM(amount),0) as t FROM order_items WHERE order_id=?", (order_id,), fetch=True)
+    total = total_df.iloc[0]['t']
+    run_query("UPDATE orders SET total_amount=? WHERE id=?", (total, order_id))
 
 def init_db():
     """Инициализация базы данных"""
@@ -634,13 +640,8 @@ elif choice == "Прайс-лист Услуг":
     else:
         st.info("Пока нет ни одной услуги.")
 
-# Вспомогательная функция пересчёта суммы заказа
-def _update_order_total(order_id):
-    total_df = run_query("SELECT COALESCE(SUM(amount),0) as t FROM order_items WHERE order_id=?", (order_id,), fetch=True)
-    total = total_df.iloc[0]['t']
-    run_query("UPDATE orders SET total_amount=? WHERE id=?", (total, order_id))
-# --- 3. ЗАКАЗЫ И УСЛУГИ (НОВАЯ КРАСИВАЯ ВЕРСИЯ) ---
 
+# --- 3. ЗАКАЗЫ И УСЛУГИ (НОВАЯ КРАСИВАЯ ВЕРСИЯ) ---
 
 elif choice == "Заказы и услуги":
     st.subheader("Заказы и услуги")
