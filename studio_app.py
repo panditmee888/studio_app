@@ -312,17 +312,17 @@ if choice == "Клиенты и Группы":
                         
                         phone = "7" + c_phone_raw  # Сохраняем как 7XXXXXXXXXX (11 цифр)
         
-                            vk = c_vk_raw.strip() if c_vk_raw else ""
-                            tg = c_tg_raw.strip().replace("@", "").replace("t.me/", "") if c_tg_raw else ""
-                            g_id = group_map.get(c_group) if c_group != "Без группы" else None
-        
-                            run_query('''INSERT INTO clients 
-                                (name, sex, phone, vk_id, tg_id, group_id) 
-                                VALUES (?,?,?,?,?,?)''', 
-                                (c_name, c_sex, phone, vk, tg, g_id))
-        
-                            st.success("✅ Клиент добавлен!")
-                            st.rerun()
+                        vk = c_vk_raw.strip() if c_vk_raw else ""
+                        tg = c_tg_raw.strip().replace("@", "").replace("t.me/", "") if c_tg_raw else ""
+                        g_id = group_map.get(c_group) if c_group != "Без группы" else None
+    
+                        run_query('''INSERT INTO clients 
+                            (name, sex, phone, vk_id, tg_id, group_id) 
+                            VALUES (?,?,?,?,?,?)''', 
+                            (c_name, c_sex, phone, vk, tg, g_id))
+    
+                        st.success("✅ Клиент добавлен!")
+                        st.rerun()
                     else:
                         st.error("Введите имя клиента")
 
