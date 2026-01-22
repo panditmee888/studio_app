@@ -445,7 +445,6 @@ if choice == "Клиенты и Группы":
                                     st.rerun()
         
                 with col_right:
-                    st.markdown("#### 📋 Список существующих групп")
                     if not groups_df.empty:
                         groups_display = groups_df.copy()
                         groups_display.columns = ['ID', 'Название группы']
