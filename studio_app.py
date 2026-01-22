@@ -349,7 +349,7 @@ if choice == "Клиенты и Группы":
         # Телефон
         display_df['Телефон (текст)'] = display_df['phone'].apply(format_phone)  # +7 999 999-99-99
         display_df['Телефон (ссылка)'] = display_df['phone'].apply(
-            lambda x: f"tel:+{''.join(filter(str.isdigit, str(x)))}" if x else ""
+            lambda x: f"tel:+7{''.join(filter(str.isdigit, str(x)))}" if x else ""
         )
 
         # VK
@@ -376,30 +376,23 @@ if choice == "Клиенты и Группы":
             display_df[[
                 'id', 'Имя', 'Пол',
                 'Телефон (ссылка)', 'VK (ссылка)', 'Telegram (ссылка)',
-                'Телефон (текст)', 'VK (текст)', 'Telegram (текст)',
                 'Группа', 'Первая оплата'
             ]].rename(columns={
                 'id': 'ID',
                 'Телефон (ссылка)': 'Телефон',
                 'VK (ссылка)': 'VK',
                 'Telegram (ссылка)': 'Telegram',
-                'Телефон (текст)': 'Телефон (текст)',
-                'VK (текст)': 'VK (текст)',
-                'Telegram (текст)': 'Telegram (текст)',
             }),
             column_config={
                 "Телефон": st.column_config.LinkColumn("Телефон"),
-                "Телефон (текст)": st.column_config.TextColumn(""),
                 "VK": st.column_config.LinkColumn("VK"),
-                "VK (текст)": st.column_config.TextColumn(""),
                 "Telegram": st.column_config.LinkColumn("Telegram"),
-                "Telegram (текст)": st.column_config.TextColumn(""),
             },
             column_order=[
                 "ID", "Имя", "Пол",
-                "Телефон", "Телефон (текст)",
-                "VK", "VK (текст)",
-                "Telegram", "Telegram (текст)",
+                "Телефон", 
+                "VK", 
+                "Telegram", 
                 "Группа", "Первая оплата"
             ],
             hide_index=True,
