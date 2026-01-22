@@ -246,27 +246,35 @@ if choice == "Клиенты и Группы":
                     st.markdown("**Телефон**")
                 
                     phone_input_id = f"phone_{uuid.uuid4().hex}"
+                    c_phone_raw = None  # результат
                 
                     components.html(f"""
                     <script src="https://unpkg.com/imask"></script>
                 
                     <style>
-                    #{phone_input_id} {{
-                        background-color: #0e1117;
-                        color: #f0f2f6;
-                        border: 1px solid #565a5f;
+                    body {{
+                        margin: 0;
+                        padding: 0;
+                        background-color: transparent;
+                    }}
+                
+                    input {{
+                        background-color: var(--background-color);
+                        color: var(--text-color);
+                        border: 1px solid var(--primary-color);
                         border-radius: 0.375rem;
-                        font-family: "Source Sans Pro", sans-serif;
-                        font-size: 0.92rem;
-                        height: 34px;
-                        padding-left: 11px;
+                        font-family: var(--font);
+                        font-size: 0.875rem;
+                        height: 2.25rem;
+                        line-height: 1.25rem;
                         width: 100%;
+                        padding: 0 0.75rem;
                         box-sizing: border-box;
                     }}
                 
-                    #{phone_input_id}.invalid {{
+                    input.invalid {{
                         border-color: red;
-                        background-color: #2d0000;
+                        background-color: #2f0e0e;
                     }}
                     </style>
                 
@@ -298,7 +306,7 @@ if choice == "Клиенты и Группы":
                       }});
                       validate();
                     </script>
-                    """, height=70)
+                    """, height=52)
                 
                     c_phone_raw = st.session_state.get("component_value")
                 with col5:
