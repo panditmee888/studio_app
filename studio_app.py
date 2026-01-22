@@ -403,21 +403,19 @@ if choice == "Клиенты и Группы":
     params = []
 
     if search_query:
-        # ✅ 100% регистронезависимый поиск для кириллицы
-        # Явно преобразуем и запрос, и все столбцы в нижний регистр
-        search_pattern = f"%{search_query.lower()}%"
+        search_query_normalized = search_query.lower()
+        like_pattern = f"%{search_query_normalized}%"
     
         clients_query += ''' AND (
             LOWER(c.name) LIKE ? OR 
-            LOWER(c.phone) LIKE ? OR 
+            c.phone LIKE ? OR 
             LOWER(c.vk_id) LIKE ? OR 
             LOWER(c.tg_id) LIKE ?
         )'''
-        params.extend([search_pattern] * 4)
+        params.extend([like_pattern, f"%{search_query}%", like_pattern, like_pattern])
 
     if filter_group != "Все":
-        # ✅ Фильтр по группам тоже сделан нечувствительным к регистру
-        clients_query += ' AND LOWER(g.name) = LOWER(?)'
+        clients_query += ' AND g.name = ?'
         params.append(filter_group)
 
     clients_query += ' ORDER BY c.id DESC'
