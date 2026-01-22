@@ -379,10 +379,10 @@ if choice == "Клиенты и Группы":
     # Поиск и фильтрация
     st.markdown("### 🔍 Поиск и фильтрация")
     search_col1, search_col2 = st.columns([2, 1])
-with search_col1:
-    search_query = st.text_input("Поиск по имени, телефону, VK или Telegram", placeholder="Введите текст...")
-with search_col2:
-    filter_group = st.selectbox("Фильтр по группе", ["Все"] + groups_list)
+    with search_col1:
+        search_query = st.text_input("Поиск по имени, телефону, VK или Telegram", placeholder="Введите текст...")
+    with search_col2:
+        filter_group = st.selectbox("Фильтр по группе", ["Все"] + groups_list)
 
     # Запрос клиентов
     clients_query = '''
