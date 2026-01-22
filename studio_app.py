@@ -724,7 +724,7 @@ elif choice == "Заказы и услуги":
                 with add_col3:
                     amount_raw = st.text_input("Сумма ₽", placeholder="10 000")
                 with add_col4:
-                    hours_raw = st.text_input("Количество часов", placeholder="1.5")
+                    hours_raw = st.text_input("Кол-во часов", placeholder="1.5")
 
                 # Кнопка добавления услуги
                 if st.button("Добавить услугу в заказ", disabled=not selected_order_id and order_action == "Добавить"):
