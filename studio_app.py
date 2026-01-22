@@ -235,7 +235,7 @@ if choice == "Клиенты и Группы":
                         st.info("Группы еще не созданы")
 
                 # 👇 Часть 2 — Телефон, VK и Telegram в одну строку
-                col4, col5, col6 = st.columns(2)
+                col4, col5, col6 = st.columns(3)
                 with col4:
                     c_phone_raw = st.text_input(
                     "Телефон", 
