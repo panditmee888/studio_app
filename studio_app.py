@@ -420,7 +420,7 @@ if choice == "Клиенты и Группы":
             clients_df_data = clients_df_data[
                 clients_df_data["group_name"] == filter_group
             ]
-        clients_df_data = run_query(clients_query, tuple(params), fetch=True)
+        clients_df_data = run_query(clients_query, fetch=True)
 
 
     if not clients_df_data.empty:
