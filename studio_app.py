@@ -3,8 +3,6 @@ import pandas as pd
 import sqlite3
 from datetime import datetime, date, timedelta
 import re
-import streamlit.components.v1 as components
-import json
 
 # --- КОНСТАНТЫ ---
 STATUS_LIST = ["В работе", "Ожидает оплаты", "Выполнен", "Оплачен"]
@@ -224,31 +222,12 @@ if choice == "Клиенты и Группы":
                     c_name = st.text_input("Имя *", placeholder="Иван Иванов")
                     c_sex = st.selectbox("Пол", ["М", "Ж"])
             
-                    phone_number_json = components.html(f"""
-                        <script src="https://unpkg.com/imask"></script>
-                        <input id="masked-phone" type="text" placeholder="+7 (___) ___-__-__"
-                            style="font-size:16px;padding:8px;width:200px;border:1px solid #ccc;border-radius:5px;">
-    
-                        <script>
-                            const element = document.getElementById('masked-phone');
-                            const maskOptions = {{
-                                mask: '+7 (000) 000-00-00'
-                            }};
-                            const mask = IMask(element, maskOptions);
-
-                            // Передаём значение обратно в Streamlit
-                            element.addEventListener('input', () => {{
-                                window.parent.postMessage({{ type: 'streamlit:setComponentValue', value: element.value }}, '*');
-                            }});
-                        </script>
-                    """, height=100)
-
-                    # Автоматически получаем значение из html input
-                    c_phone_raw = st.session_state.get("masked-phone")
-
-                    # Проверка
-                    if c_phone_raw:
-                        st.markdown(f"📞 Введено: `{c_phone_raw}`")
+                    # Телефон — вводим в любом формате, сохраняем как есть
+                    c_phone_raw = st.text_input(
+                        "Телефон", 
+                        placeholder="Введите номер телефона",
+                        help="Введите номер в любом формате, он будет автоматически отформатирован для отображения"
+                    )
             
                     # VK ID — вводим как есть
                     c_vk_raw = st.text_input(
@@ -273,31 +252,20 @@ if choice == "Клиенты и Группы":
             
                     if st.form_submit_button("Сохранить клиента"):
                         if c_name:
-                            if not c_phone_raw:
-                                st.error("Введите номер телефона")
-                            else:
-                                # 👇 ОЧИСТКА МАСКИРОВАННОГО НОМЕРА
-                                import re
-                                clean_digits = re.sub(r'\D', '', c_phone_raw)
-                                if len(clean_digits) == 11 and clean_digits.startswith("7"):
-                                    c_phone_raw = clean_digits[1:]  # сохраняем только 10 цифр
-                                else:
-                                    st.error("🚫 Номер телефона должен содержать 11 цифр и начинаться с +7")
-                                    st.stop()  # остановим выполнение
-
                             # Сохраняем сырые данные (без форматирования)
                             phone = c_phone_raw if c_phone_raw else ""
                             vk = c_vk_raw if c_vk_raw else ""
                             tg = c_tg_raw if c_tg_raw else ""
                             g_id = group_map.get(c_group) if c_group != "Без группы" else None
-
+                    
                             run_query('''INSERT INTO clients 
                                 (name, sex, phone, vk_id, tg_id, group_id) 
                                 VALUES (?,?,?,?,?,?)''', 
                                 (c_name, c_sex, phone, vk, tg, g_id))
                             st.success("✅ Клиент добавлен!")
                             st.rerun()
-
+                        else:
+                            st.error("Введите имя клиента")
 
 
         elif action in ["Редактировать", "Удалить"]:
