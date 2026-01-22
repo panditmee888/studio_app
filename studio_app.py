@@ -272,48 +272,60 @@ if choice == "Клиенты и Группы":
             if clients_df.empty:
                 st.info("Нет клиентов для действия.")
             else:
-                client_opts = [f"#{row['id']} {row['name']}" for _, row in clients_df.iterrows()]
-                selected_label = st.selectbox("Выберите клиента", client_opts)
-                selected_id = int(selected_label.split()[0][1:])
-                selected = clients_df[clients_df['id'] == selected_id].iloc[0]
-                edit_df = pd.DataFrame([selected])
-                edit_df['first_order_date'] = edit_df['first_order_date'].apply(format_date_display)
-
-                result_df = st.data_editor(
-                    edit_df[['id', 'name', 'sex', 'phone', 'vk_id', 'tg_id', 'group_name', 'first_order_date']],
-                    hide_index=True,
-                    column_config={
-                        "id": st.column_config.NumberColumn("ID", disabled=True),
-                        "name": st.column_config.TextColumn("Имя"),
-                        "sex": st.column_config.SelectboxColumn("Пол", options=["М", "Ж"]),
-                        "phone": st.column_config.TextColumn("Телефон"),
-                        "vk_id": st.column_config.TextColumn("VK ID"),
-                        "tg_id": st.column_config.TextColumn("Telegram"),
-                        "group_name": st.column_config.SelectboxColumn("Группа", options=["Без группы"] + group_list),
-                        "first_order_date": st.column_config.TextColumn("Первая оплата"),
-                    },
-                    use_container_width=True,
-                    key="client_edit_editor"
-                )
+                client_options = [f"#{row['id']} {row['name']}" for _, row in clients_df_data.iterrows()]
+                selected_client = st.selectbox("Выберите клиента для редактирования", client_options, key="client_select")
+        
+                if selected_client:
+                    # Получаем ID выбранного клиента
+                    selected_id = int(selected_client.split()[0][1:])
+                    selected_row = clients_df_data[clients_df_data['id'] == selected_id].iloc[0]
+            
+                    # Создаём таблицу с одной строкой
+                    edit_df = pd.DataFrame([selected_row])
+                    edit_df['first_order_date'] = edit_df['first_order_date'].apply(format_date_display)
+            
+                    st.info(f"Редактирование: #{selected_id} {selected_row['name']}")
+            
+                    edited_client = st.data_editor(
+                        edit_df[['id', 'name', 'sex', 'phone', 'vk_id', 'tg_id', 'group_name', 'first_order_date']],
+                        column_config={
+                            "id": st.column_config.NumberColumn("ID", disabled=True),
+                            "name": st.column_config.TextColumn("Имя"),
+                            "sex": st.column_config.SelectboxColumn("Пол", options=["М", "Ж"]),
+                            "phone": st.column_config.TextColumn("Телефон"),
+                            "vk_id": st.column_config.TextColumn("VK ID"),
+                            "tg_id": st.column_config.TextColumn("Telegram"),
+                            "group_name": st.column_config.SelectboxColumn("Группа", options=["Без группы"] + groups_list),
+                            "first_order_date": st.column_config.TextColumn("Первая оплата"),
+                        },
+                        hide_index=True,
+                        use_container_width=True,
+                        key="single_client_editor"
+                    )
 
                 if action == "Редактировать":
-                    if not result_df.equals(edit_df):
-                        new_row = result_df.iloc[0]
-                        f_date = parse_date_to_db(new_row['first_order_date'])
-                        g_id = group_map.get(new_row['group_name']) if new_row['group_name'] != "Без группы" else None
-
-                        run_query(
-                            '''
-                            UPDATE clients SET name=?, sex=?, phone=?, vk_id=?, tg_id=?, group_id=?, first_order_date=?
-                            WHERE id=?
-                            ''',
-                            (
-                                new_row['name'], new_row['sex'], new_row['phone'],
-                                new_row['vk_id'], new_row['tg_id'], g_id, f_date, new_row['id']
-                            )
-                        )
-                        st.success("✅ Изменения сохранены!")
-                        st.rerun()
+                    if not edited_client.equals(edit_df):
+                       new_row = edited_client.iloc[0]
+                       group_name = new_row['group_name']
+                       g_id = group_map.get(group_name) if group_name != "Без группы" else None
+                       first_order = parse_date_to_db(new_row['first_order_date'])
+                
+                       run_query('''
+                           UPDATE clients 
+                           SET name=?, sex=?, phone=?, vk_id=?, tg_id=?, group_id=?, first_order_date=?
+                           WHERE id=?
+                       ''', (
+                           new_row['name'],
+                           new_row['sex'],
+                           new_row['phone'],
+                           new_row['vk_id'],
+                           new_row['tg_id'],
+                           g_id,
+                           first_order,
+                           selected_id
+                       ))
+                       st.success("✅ Изменения сохранены!")
+                       st.rerun()
                     else:
                         st.info("Нет изменений")
 
