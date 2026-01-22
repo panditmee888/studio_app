@@ -372,7 +372,6 @@ if choice == "Клиенты и Группы":
         if action == "Добавить":
             with col_l:
                 with st.form("add_group_form"):
-                    st.markdown("#### ➕ Добавление группы")
                     new_group_name = st.text_input("Название группы *", placeholder="Например: Постоянные, VIP")
     
                     if st.form_submit_button("Сохранить группу"):
@@ -449,11 +448,10 @@ if choice == "Клиенты и Группы":
                                     st.session_state["group_rerun"] = True
     
             # Таблица групп — всегда в правой колонке
-            with col_r:
-                st.markdown("#### 📋 Список всех групп")
-                groups_display = groups_df.copy()
-                groups_display.columns = ['ID', 'Название группы']
-                st.dataframe(groups_display, use_container_width=True, hide_index=True)
+            #with col_r:
+               # groups_display = groups_df.copy()
+               # groups_display.columns = ['ID', 'Название группы']
+               # st.dataframe(groups_display, use_container_width=True, hide_index=True)
     
     # 👈 После всех блоков — если сработал флаг, перезагрузить
     if st.session_state.get("group_rerun"):
