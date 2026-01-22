@@ -344,7 +344,63 @@ if choice == "Клиенты и Группы":
         display_df.columns = ['ID', 'Имя', 'Пол', 'Телефон', 'VK', 'Telegram', 'Группа', 'Первая оплата']
         
         # Отображаем форматированную таблицу
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        # Создание HTML-таблицы с кликабельными ссылками
+        html = """
+        <style>
+        .custom-table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.95em;
+        }
+        .custom-table th, .custom-table td {
+            border: 1px solid #999;
+            padding: 6px 10px;
+            text-align: left;
+        }
+        .custom-table th {
+            background-color: #eee;
+            font-weight: bold;
+        }
+        </style>
+        <table class='custom-table'>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Имя</th>
+                    <th>Пол</th>
+                    <th>Телефон</th>
+                    <th>VK</th>
+                    <th>Telegram</th>
+                    <th>Группа</th>
+                    <th>Первая оплата</th>
+                </tr>
+            </thead>
+            <tbody>
+        """
+
+        for _, row in display_df.iterrows():
+            phone_digits = ''.join(filter(str.isdigit, str(row['Телефон'])))
+            phone_link = f'+{phone_digits}' if phone_digits else ''
+            phone_html = f"<a href='tel:{phone_link}'>{format_phone(row['Телефон'])}</a>" if phone_link else ''
+            vk_html = f"<a href='https://vk.com/{row['VK']}' target='_blank'>{row['VK']}</a>" if row['VK'] else ''
+            tg_html = f"<a href='https://t.me/{row['Telegram']}' target='_blank'>{row['Telegram']}</a>" if row['Telegram'] else ''
+    
+            html += f"""
+                <tr>
+                    <td>{row['ID']}</td>
+                    <td>{row['Имя']}</td>
+                    <td>{row['Пол']}</td>
+                    <td>{phone_html}</td>
+                    <td>{vk_html}</td>
+                    <td>{tg_html}</td>
+                    <td>{row['Группа']}</td>
+                    <td>{row['Первая оплата']}</td>
+                </tr>
+            """
+
+        html += "</tbody></table>"
+
+        st.markdown(html, unsafe_allow_html=True)
         
         st.markdown("---")
         
