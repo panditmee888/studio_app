@@ -297,8 +297,7 @@ if choice == "Клиенты и Группы":
                                 (c_name, c_sex, phone, vk, tg, g_id))
                             st.success("✅ Клиент добавлен!")
                             st.rerun()
-    else:
-        st.error("Введите имя клиента")
+
 
 
         elif action in ["Редактировать", "Удалить"]:
