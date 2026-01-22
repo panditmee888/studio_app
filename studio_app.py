@@ -275,7 +275,7 @@ if choice == "Клиенты и Группы":
                         if c_name:
                            if not c_phone_raw:
                               st.error("Введите номер телефона")
-                          else:
+                           else:
                               # 👇 ОЧИСТКА МАСКИРОВАННОГО НОМЕРА
                               import re
                               clean_digits = re.sub(r'\D', '', c_phone_raw)
