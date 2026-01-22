@@ -21,6 +21,16 @@ def format_phone(phone_str):
         return f"+{digits[0]} {digits[1:4]} {digits[4:7]}-{digits[7:9]}-{digits[9:11]}"
     return phone_str
 
+def format_vk_link(vk_id) -> str:
+    """Формирует правильную ссылку на VK"""
+    if not vk_id or pd.isna(vk_id):
+        return ""
+    vk_id = str(vk_id).strip()
+    # Если только цифры — значит, это id
+    if vk_id.isdigit():
+        return f"https://vk.com/id{vk_id}"
+    return f"https://vk.com/{vk_id}"
+
 def format_vk(vk_str):
     """Форматирование VK ID для отображения"""
     if not vk_str or pd.isna(vk_str):
@@ -333,49 +343,65 @@ if choice == "Клиенты и Группы":
     if not clients_df_data.empty:
         st.info(f"Найдено клиентов: {len(clients_df_data)}")
         
-        # Подготовка данных
+        # Подготовка ссылок и отображаемых текстов
         display_df = clients_df_data.copy()
 
         # Телефон
-        display_df['phone_text'] = display_df['phone'].apply(format_phone)
-        display_df['phone_link'] = display_df['phone'].apply(
-            lambda x: f"tel:+7{''.join(filter(str.isdigit, str(x)))}" if x else None
+        display_df['Телефон (текст)'] = display_df['phone'].apply(format_phone)  # +7 999 999-99-99
+        display_df['Телефон (ссылка)'] = display_df['phone'].apply(
+            lambda x: f"tel:+{''.join(filter(str.isdigit, str(x)))}" if x else ""
         )
 
         # VK
-        display_df['vk_text'] = display_df['vk_id']
-        display_df['vk_link'] = display_df['vk_id'].apply(lambda x: f"https://vk.com/{x}" if x else None)
+        display_df['VK (текст)'] = display_df['vk_id'].fillna("")
+        display_df['VK (ссылка)'] = display_df['vk_id'].apply(format_vk_link)
 
         # Telegram
-        display_df['tg_text'] = display_df['tg_id']
-        display_df['tg_link'] = display_df['tg_id'].apply(lambda x: f"https://t.me/{x}" if x else None)
+        display_df['tg_id'] = display_df['tg_id'].fillna("")
+        display_df['Telegram (текст)'] = display_df['tg_id']
+        display_df['Telegram (ссылка)'] = display_df['tg_id'].apply(lambda x: f"https://t.me/{x}" if x else "")
 
+        # Другое
         display_df['Имя'] = display_df['name']
         display_df['Пол'] = display_df['sex']
         display_df['Группа'] = display_df['group_name']
         display_df['Первая оплата'] = display_df['first_order_date'].apply(format_date_display)
 
-        display_df['phone_link'] = display_df['phone_link'].fillna("")
-        display_df['vk_link'] = display_df['vk_link'].fillna("")
-        display_df['tg_link'] = display_df['tg_link'].fillna("")
+        # Удалим NaN из ссылок
+        display_df['Телефон (ссылка)'] = display_df['Телефон (ссылка)'].fillna("")
+        display_df['VK (ссылка)'] = display_df['VK (ссылка)'].fillna("")
+        display_df['Telegram (ссылка)'] = display_df['Telegram (ссылка)'].fillna("")
 
         st.data_editor(
             display_df[[
                 'id', 'Имя', 'Пол',
-                'phone_link', 'vk_link', 'tg_link',
+                'Телефон (ссылка)', 'VK (ссылка)', 'Telegram (ссылка)',
+                'Телефон (текст)', 'VK (текст)', 'Telegram (текст)',
                 'Группа', 'Первая оплата'
             ]].rename(columns={
                 'id': 'ID',
-                'phone_link': 'Телефон',
-                'vk_link': 'VK',
-                'tg_link': 'Telegram',
+                'Телефон (ссылка)': 'Телефон',
+                'VK (ссылка)': 'VK',
+                'Telegram (ссылка)': 'Telegram',
+                'Телефон (текст)': 'Телефон (текст)',
+                'VK (текст)': 'VK (текст)',
+                'Telegram (текст)': 'Telegram (текст)',
             }),
             column_config={
-                "Телефон": st.column_config.LinkColumn(),
-                "VK": st.column_config.LinkColumn(),
-                "Telegram": st.column_config.LinkColumn(),
-                # все остальные по умолчанию
+                "Телефон": st.column_config.LinkColumn("Телефон"),
+                "Телефон (текст)": st.column_config.TextColumn(""),
+                "VK": st.column_config.LinkColumn("VK"),
+                "VK (текст)": st.column_config.TextColumn(""),
+                "Telegram": st.column_config.LinkColumn("Telegram"),
+                "Telegram (текст)": st.column_config.TextColumn(""),
             },
+            column_order=[
+                "ID", "Имя", "Пол",
+                "Телефон", "Телефон (текст)",
+                "VK", "VK (текст)",
+                "Telegram", "Telegram (текст)",
+                "Группа", "Первая оплата"
+            ],
             hide_index=True,
             use_container_width=True,
             disabled=True,
