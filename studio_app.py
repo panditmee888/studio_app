@@ -9,18 +9,20 @@ STATUS_LIST = ["В работе", "Ожидает оплаты", "Выполне
 
 # --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 def format_phone(phone_str):
-    """Форматирование телефона в +7 000 000-00-00"""
+    """
+    Форматирование номера: 7XXXXXXXXXX → +7 (XXX) XXX-XX-XX
+    """
     if not phone_str or pd.isna(phone_str):
         return ""
     digits = ''.join(filter(str.isdigit, str(phone_str)))
-    if digits.startswith('8') and len(digits) == 11:
-        digits = '7' + digits[1:]
+    if digits.startswith("8"):
+        digits = "7" + digits[1:]
     if len(digits) == 10:
-        digits = '7' + digits
-    if len(digits) >= 11:
-        return f"+{digits[0]} {digits[1:4]} {digits[4:7]}-{digits[7:9]}-{digits[9:11]}"
-    return phone_str
+        digits = "7" + digits  # если не хватает кода
+    if len(digits) != 11 or not digits.startswith("7"):
+        return phone_str  # вернём как есть
 
+    return f"+7 ({digits[1:4]}) {digits[4:7]}-{digits[7:9]}-{digits[9:11]}"
 def format_vk_link(vk_id) -> str:
     """Формирует правильную ссылку на VK"""
     if not vk_id or pd.isna(vk_id):
@@ -252,18 +254,37 @@ if choice == "Клиенты и Группы":
             
                     if st.form_submit_button("Сохранить клиента"):
                         if c_name:
-                            # Сохраняем сырые данные (без форматирования)
-                            phone = c_phone_raw if c_phone_raw else ""
-                            vk = c_vk_raw if c_vk_raw else ""
-                            tg = c_tg_raw if c_tg_raw else ""
-                            g_id = group_map.get(c_group) if c_group != "Без группы" else None
-                    
-                            run_query('''INSERT INTO clients 
-                                (name, sex, phone, vk_id, tg_id, group_id) 
-                                VALUES (?,?,?,?,?,?)''', 
-                                (c_name, c_sex, phone, vk, tg, g_id))
-                            st.success("✅ Клиент добавлен!")
-                            st.rerun()
+                            if not c_phone_raw:
+                                st.error("Введите номер телефона")
+                            else:
+                                import re
+                                digits_only = re.sub(r'\D', '', c_phone_raw)
+
+                                # Нормализуем в формат: 7XXXXXXXXXX
+                                if digits_only.startswith("8") and len(digits_only) == 11:
+                                    digits_only = "7" + digits_only[1:]
+
+                                if len(digits_only) == 10:
+                                    digits_only = "7" + digits_only
+
+                                if len(digits_only) != 11 or not digits_only.startswith("7"):
+                                    st.error("❌ Введите корректный номер: 11 цифр, начиная с 7 (например: 79991234567)")
+                                    st.stop()
+
+                                phone = digits_only
+
+                                # VK и TG
+                                vk = c_vk_raw.strip() if c_vk_raw else ""
+                                tg = c_tg_raw.strip().replace("@", "").replace("t.me/", "") if c_tg_raw else ""
+                                g_id = group_map.get(c_group) if c_group != "Без группы" else None
+
+                                run_query('''INSERT INTO clients 
+                                    (name, sex, phone, vk_id, tg_id, group_id) 
+                                    VALUES (?,?,?,?,?,?)''', 
+                                    (c_name, c_sex, phone, vk, tg, g_id))
+
+                                st.success("✅ Клиент добавлен!")
+                                st.rerun()
                         else:
                             st.error("Введите имя клиента")
 
@@ -429,10 +450,7 @@ if choice == "Клиенты и Группы":
         display_df = clients_df_data.copy()
 
         # Телефон
-        display_df['Телефон (текст)'] = display_df['phone'].apply(format_phone)  # +7 999 999-99-99
-        display_df['Телефон (ссылка)'] = display_df['phone'].apply(
-            lambda x: f"tel:+7{''.join(filter(str.isdigit, str(x)))}" if x else ""
-        )
+        display_df['Телефон'] = display_df['phone'].apply(format_phone)  # +7 999 999-99-99
 
         # VK
         display_df['VK (текст)'] = display_df['vk_id'].fillna("")
@@ -450,23 +468,20 @@ if choice == "Клиенты и Группы":
         display_df['Первая оплата'] = display_df['first_order_date'].apply(format_date_display)
 
         # Удалим NaN из ссылок
-        display_df['Телефон (ссылка)'] = display_df['Телефон (ссылка)'].fillna("")
         display_df['VK (ссылка)'] = display_df['VK (ссылка)'].fillna("")
         display_df['Telegram (ссылка)'] = display_df['Telegram (ссылка)'].fillna("")
 
         st.data_editor(
             display_df[[
                 'id', 'Имя', 'Пол',
-                'Телефон (ссылка)', 'VK (ссылка)', 'Telegram (ссылка)',
+                'Телефон', 'VK (ссылка)', 'Telegram (ссылка)',
                 'Группа', 'Первая оплата'
             ]].rename(columns={
                 'id': 'ID',
-                'Телефон (ссылка)': 'Телефон',
                 'VK (ссылка)': 'VK',
                 'Telegram (ссылка)': 'Telegram',
             }),
             column_config={
-                "Телефон": st.column_config.LinkColumn("Телефон"),
                 "VK": st.column_config.LinkColumn("VK"),
                 "Telegram": st.column_config.LinkColumn("Telegram"),
             },
