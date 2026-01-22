@@ -878,7 +878,7 @@ elif choice == "Заказы и услуги":
 
         elif order_mode == "Удалить" and order_id:
             st.warning("Удалить весь заказ?")
-            if st.button("Подтвердить удаление", use_container_width=True, type="secondary'):
+            if st.button("Подтвердить удаление", use_container_width=True, type='secondary'):
                 # Сначала удаляем связанные услуги, если они есть
                 run_query("DELETE FROM order_items WHERE order_id=?", (order_id,))
                 run_query("DELETE FROM orders WHERE id=?", (order_id,))
