@@ -352,22 +352,33 @@ if choice == "Клиенты и Группы":
         groups_df = run_query("SELECT id, name FROM groups ORDER BY id DESC", fetch=True)
 
         if action == "Добавить":
-            with st.form("add_group"):
-                new_group_name = st.text_input("Название группы *", placeholder="Например: VIP, Новые клиенты")
-        
-                # ✅ Делаем кнопку идентичной с клиентами, без цветового выделения
-                if st.form_submit_button("Сохранить группу"):
-                    if new_group_name.strip():
-                        # Проверяем уникальность названия
-                        check_exists = run_query("SELECT id FROM groups WHERE name=?", (new_group_name.strip(),), fetch=True)
-                        if not check_exists.empty:
-                            st.error("❌ Группа с таким названием уже существует")
+            col1, col2 = st.columns([2, 3])
+            
+            with col1:
+                with st.form("add_group"):
+                    new_group_name = st.text_input("Название группы *", placeholder="Например: VIP, Новые клиенты")
+            
+                    # ✅ Делаем кнопку идентичной с клиентами, без цветового выделения
+                    if st.form_submit_button("Сохранить группу"):
+                        if new_group_name.strip():
+                            # Проверяем уникальность названия
+                            check_exists = run_query("SELECT id FROM groups WHERE name=?", (new_group_name.strip(),), fetch=True)
+                            if not check_exists.empty:
+                                st.error("❌ Группа с таким названием уже существует")
+                            else:
+                                run_query("INSERT INTO groups (name) VALUES (?)", (new_group_name.strip(),))
+                                st.success("✅ Группа добавлена!")
+                                st.rerun()
                         else:
-                            run_query("INSERT INTO groups (name) VALUES (?)", (new_group_name.strip(),))
-                            st.success("✅ Группа добавлена!")
-                            st.rerun()
-                    else:
-                        st.error("❌ Введите название группы")
+                            st.error("❌ Введите название группы")
+            with col2:
+                st.markdown("#### 📋 Список существующих групп")
+                if not groups_df.empty:
+                    groups_display = groups_df.copy()
+                    groups_display.columns = ['ID', 'Название группы']
+                    st.dataframe(groups_display, use_container_width=True, hide_index=True)
+                else:
+                    st.info("Группы пока не добавлены")
 
         elif action in ["Редактировать", "Удалить"]:
             if groups_df.empty:
