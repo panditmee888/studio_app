@@ -218,28 +218,55 @@ if choice == "Клиенты и Группы":
         ''', fetch=True)
 
         if action == "Добавить":
-            with st.form("add_client_form"):
-                name = st.text_input("Имя *", placeholder="Иван Иванов")
-                sex = st.selectbox("Пол", ["М", "Ж"])
-                phone = st.text_input("Телефон", placeholder="+7 999 123-45-67")
-                vk = st.text_input("VK ID", placeholder="username или id12345")
-                tg = st.text_input("Telegram", placeholder="username или @username")
-                group = st.selectbox("Группа", ["Без группы"] + group_list)
-
-                if st.form_submit_button("Добавить"):
-                    if name.strip():
-                        vk_clean = vk.strip().replace("https://vk.com/", "").replace("vk.com/", "")
-                        tg_clean = tg.strip().replace("@", "").replace("https://t.me/", "")
-                        group_id = group_map.get(group) if group != "Без группы" else None
-
-                        run_query('''
-                            INSERT INTO clients (name, sex, phone, vk_id, tg_id, group_id)
-                            VALUES (?,?,?,?,?,?)
-                        ''', (name.strip(), sex, phone.strip(), vk_clean, tg_clean, group_id))
-                        st.success("✅ Клиент добавлен.")
-                        st.rerun()
+            with st.form("add_client"):
+                    c_name = st.text_input("Имя *", placeholder="Иван Иванов")
+                    c_sex = st.selectbox("Пол", ["М", "Ж"])
+            
+                    # Телефон — вводим в любом формате, сохраняем как есть
+                    c_phone_raw = st.text_input(
+                        "Телефон", 
+                        placeholder="Введите номер телефона",
+                        help="Введите номер в любом формате, он будет автоматически отформатирован для отображения"
+                    )
+            
+                    # VK ID — вводим как есть
+                    c_vk_raw = st.text_input(
+                        "VK ID", 
+                        placeholder="id123456789 или username",
+                        help="Введите ID или username, ссылка сформируется автоматически"
+                    )
+            
+                    # Telegram — вводим как есть
+                    c_tg_raw = st.text_input(
+                        "Telegram", 
+                        placeholder="username (без @)",
+                        help="Введите username без @, ссылка сформируется автоматически"
+                    )
+            
+                    # Группа
+                    if groups_list:
+                        c_group = st.selectbox("Группа", options=["Без группы"] + groups_list)
                     else:
-                        st.error("Имя обязательно!")
+                        c_group = "Без группы"
+                        st.info("Группы еще не созданы")
+            
+                    if st.form_submit_button("Сохранить клиента"):
+                        if c_name:
+                            # Сохраняем сырые данные (без форматирования)
+                            phone = c_phone_raw if c_phone_raw else ""
+                            vk = c_vk_raw if c_vk_raw else ""
+                            tg = c_tg_raw if c_tg_raw else ""
+                            g_id = group_map.get(c_group) if c_group != "Без группы" else None
+                    
+                            run_query('''INSERT INTO clients 
+                                (name, sex, phone, vk_id, tg_id, group_id) 
+                                VALUES (?,?,?,?,?,?)''', 
+                                (c_name, c_sex, phone, vk, tg, g_id))
+                            st.success("✅ Клиент добавлен!")
+                            st.rerun()
+                        else:
+                            st.error("Введите имя клиента")
+
 
         elif action in ["Редактировать", "Удалить"]:
             if clients_df.empty:
@@ -296,42 +323,50 @@ if choice == "Клиенты и Группы":
                         st.success("✅ Клиент удалён")
                         st.rerun()
 
-    # --- Группы ---
-    with st.expander("⚙️ Управление группами"):
-        col1, col2 = st.columns([3, 2])
+    # Управление группами
+    with st.expander("⚙️ Группы клиентов", expanded=False):
+        col1, col2 = st.columns([2, 1])
         with col1:
-            with st.form("add_group_form"):
-                g_new = st.text_input("Название новой группы")
+            with st.form("add_group"):
+                new_group = st.text_input("Название группы")
                 if st.form_submit_button("Добавить группу"):
-                    if g_new.strip():
-                        run_query("INSERT INTO groups (name) VALUES (?)", (g_new.strip(),))
-                        st.success("✅ Группа добавлена")
+                    if new_group:
+                        run_query("INSERT INTO groups (name) VALUES (?)", (new_group,))
+                        st.success("Группа добавлена")
                         st.rerun()
-                    else:
-                        st.error("Название не должно быть пустым")
-
         with col2:
+            st.write("Список групп:")
             if not groups_df.empty:
                 for idx, row in groups_df.iterrows():
                     col_a, col_b, col_c = st.columns([3, 1, 1])
                     with col_a:
-                        group_name = st.text_input("Группа", value=row['name'], key=f"g_{row['id']}", label_visibility="collapsed")
+                        new_name = st.text_input(
+                            "Название", 
+                            value=row['name'], 
+                            key=f"group_name_{row['id']}",
+                            label_visibility="collapsed"
+                        )
                     with col_b:
-                        if st.button("💾", key=f"g_save_{row['id']}") and group_name.strip() != row['name']:
-                            run_query("UPDATE groups SET name=? WHERE id=?", (group_name.strip(), row['id']))
-                            st.success("Обновлено")
-                            st.rerun()
+                        if st.button("💾", key=f"update_{row['id']}", help="Сохранить"):
+                            if new_name and new_name != row['name']:
+                                run_query("UPDATE groups SET name=? WHERE id=?", (new_name, row['id']))
+                                st.success("Группа обновлена")
+                                st.rerun()
                     with col_c:
-                        if st.button("🗑️", key=f"g_del_{row['id']}"):
-                            client_check = run_query("SELECT COUNT(*) as n FROM clients WHERE group_id=?", (row['id'],), fetch=True)
-                            if client_check.iloc[0]['n'] > 0:
-                                st.error("В группе есть клиенты. Удаление невозможно.")
+                        if st.button("🗑️", key=f"delete_{row['id']}", help="Удалить"):
+                            clients_check = run_query(
+                                "SELECT COUNT(*) as count FROM clients WHERE group_id=?", 
+                                (row['id'],), 
+                                fetch=True
+                            )
+                            if not clients_check.empty and clients_check['count'].iloc[0] > 0:
+                                st.warning("Нельзя удалить группу с клиентами!")
                             else:
                                 run_query("DELETE FROM groups WHERE id=?", (row['id'],))
-                                st.success("Удалено")
+                                st.success("Группа удалена")
                                 st.rerun()
             else:
-                st.info("Группы пока не созданы.")
+                st.info("Групп пока нет")
 
     # Поиск и фильтрация
     st.markdown("### 🔍 Поиск и фильтрация")
