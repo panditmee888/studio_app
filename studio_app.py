@@ -339,7 +339,7 @@ if choice == "Клиенты и Группы":
         # Телефон
         display_df['phone_text'] = display_df['phone'].apply(format_phone)
         display_df['phone_link'] = display_df['phone'].apply(
-            lambda x: f"tel:+{'7'.join(filter(str.isdigit, str(x)))}" if x else None
+            lambda x: f"tel:+7{''.join(filter(str.isdigit, str(x)))}" if x else None
         )
 
         # VK
