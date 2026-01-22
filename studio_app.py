@@ -636,7 +636,7 @@ elif choice == "Прайс-лист Услуг":
 
 # --- 3. ЗАКАЗЫ ---
 elif choice == "Заказы и услуги":
-    st.subheader("📦 Управление заказами и их наполнением")
+    st.subheader("🎯 Действие с заказом")
 
     # --- Подготовка справочных данных ---
     clients_df = run_query("SELECT id, name FROM clients", fetch=True)
@@ -648,11 +648,11 @@ elif choice == "Заказы и услуги":
     srv_list = services_cat['name'].tolist() if not services_cat.empty else []
 
     # --- Основная разметка на две колонки ---
-    left_col, right_col = st.columns([2, 1])
+    left_col, right_col = st.columns([1, 2])
 
     with left_col:
         # 1. Выбор действия с заказом
-        st.markdown("### 🎯 Действие с заказом")
+        #st.markdown("### 🎯 Действие с заказом")
         order_action = st.radio(
             "Выберите действие", 
             ["Добавить", "Редактировать", "Удалить"], 
@@ -664,10 +664,9 @@ elif choice == "Заказы и услуги":
         order_data = None
 
         # 2. Поле выбора клиента
-        st.markdown("---")
         if client_names:
             if order_action == "Добавить":
-                selected_client = st.selectbox("🧑 Клиент", client_names, key="new_order_client")
+                selected_client = st.selectbox("Клиент", client_names, key="new_order_client")
             else:
                 # Для редактирования/удаления сначала выбираем заказ
                 orders_df = run_query('''
@@ -693,18 +692,17 @@ elif choice == "Заказы и услуги":
         col_date, col_status = st.columns(2)
         with col_date:
             if order_action == "Добавить" or not selected_order_id:
-                execution_date = st.date_input("📅 Дата исполнения", value=date.today())
+                execution_date = st.date_input("Дата исполнения", value=date.today())
             else:
-                execution_date = st.date_input("📅 Дата исполнения", value=datetime.strptime(order_data['execution_date'], "%Y-%m-%d").date())
+                execution_date = st.date_input("Дата исполнения", value=datetime.strptime(order_data['execution_date'], "%Y-%m-%d").date())
 
         with col_status:
             if order_action == "Добавить" or not selected_order_id:
-                order_status = st.selectbox("🏷️ Статус", STATUS_LIST)
+                order_status = st.selectbox(" Статус", STATUS_LIST)
             else:
-                order_status = st.selectbox("🏷️ Статус", STATUS_LIST, index=STATUS_LIST.index(order_data['status']))
+                order_status = st.selectbox(" Статус", STATUS_LIST, index=STATUS_LIST.index(order_data['status']))
 
         # 4. Экспандер Управление услугами (открытый по умолчанию)
-        st.markdown("---")
         with st.expander("🛠️ Управление услугами", expanded=True):
             service_action = st.radio(
                 "Действие с услугой",
@@ -718,17 +716,18 @@ elif choice == "Заказы и услуги":
 
             # Отображаем контент в зависимости от выбранного действия
             if service_action == "Добавить":
-                st.markdown("#### ➕ Добавить новую услугу")
-                add_col1, add_col2 = st.columns(2)
+                add_col1, add_col2, add_col3, add_col4 = st.columns(4)
                 with add_col1:
-                    new_service = st.selectbox("Услуга из прайса", srv_list, key="new_service")
-                    pay_date = st.date_input("Дата оплаты", value=date.today())
+                    new_service = st.selectbox("Услуга", srv_list, key="new_service")
                 with add_col2:
-                    amount_raw = st.text_input("💸 Сумма ₽", placeholder="10 000")
-                    hours_raw = st.text_input("⏱️ Количество часов", placeholder="1.5")
+                    pay_date = st.date_input("Дата оплаты", value=date.today())
+                with add_col3:
+                    amount_raw = st.text_input("Сумма ₽", placeholder="10 000")
+                with add_col4:
+                    hours_raw = st.text_input("Количество часов", placeholder="1.5")
 
                 # Кнопка добавления услуги
-                if st.button("✅ Добавить услугу в заказ", disabled=not selected_order_id and order_action == "Добавить"):
+                if st.button("Добавить услугу в заказ", disabled=not selected_order_id and order_action == "Добавить"):
                     if not selected_order_id and order_action == "Добавить":
                         st.error("⚠️ Сначала создайте заказ")
                     else:
@@ -802,7 +801,7 @@ elif choice == "Заказы и услуги":
         # 5. Кнопка основного действия с заказом
         st.markdown("---")
         if order_action == "Добавить":
-            if st.button("✅ Создать заказ", type="primary", disabled=not client_names):
+            if st.button("Создать заказ", type="primary", disabled=not client_names):
                 c_id = client_map[selected_client]
                 run_query("INSERT INTO orders (client_id, execution_date, status) VALUES (?,?,?)",
                           (c_id, execution_date.strftime("%Y-%m-%d"), order_status))
