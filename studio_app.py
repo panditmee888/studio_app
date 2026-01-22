@@ -407,7 +407,7 @@ if choice == "Клиенты и Группы":
                                   c.phone LIKE ? OR 
                                   LOWER(c.vk_id) LIKE LOWER(?) OR 
                                   LOWER(c.tg_id) LIKE LOWER(?))'''
-        search_pattern = f'%{search_query}%'
+        search_pattern = f"%{search_query.lower()}%"
         params.extend([search_pattern] * 4)
 
     if filter_group != "Все":
