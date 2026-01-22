@@ -221,72 +221,65 @@ if choice == "Клиенты и Группы":
 
         if action == "Добавить":
             with st.form("add_client"):
+                # 👇 Часть 1 — Имя и Пол — в одной строке
+                col1, col2 = st.columns([2,1])
+                with col1:
                     c_name = st.text_input("Имя *", placeholder="Иван Иванов")
+                with col2:
                     c_sex = st.selectbox("Пол", ["М", "Ж"])
-            
-                    # Телефон — вводим в любом формате, сохраняем как есть
-                    c_phone_raw = st.text_input(
-                        "Телефон", 
-                        placeholder="Введите номер телефона",
-                        help="Введите номер в любом формате, он будет автоматически отформатирован для отображения"
-                    )
-            
-                    # VK ID — вводим как есть
-                    c_vk_raw = st.text_input(
-                        "VK ID", 
-                        placeholder="id123456789 или username",
-                        help="Введите ID или username, ссылка сформируется автоматически"
-                    )
-            
-                    # Telegram — вводим как есть
-                    c_tg_raw = st.text_input(
-                        "Telegram", 
-                        placeholder="username (без @)",
-                        help="Введите username без @, ссылка сформируется автоматически"
-                    )
-            
-                    # Группа
-                    if groups_list:
-                        c_group = st.selectbox("Группа", options=["Без группы"] + groups_list)
-                    else:
-                        c_group = "Без группы"
-                        st.info("Группы еще не созданы")
-            
-                    if st.form_submit_button("Сохранить клиента"):
-                        if c_name:
-                            if not c_phone_raw:
-                                st.error("Введите номер телефона")
-                            else:
-                                import re
-                                digits_only = re.sub(r'\D', '', c_phone_raw)
-
-                                # Нормализуем в формат: 7XXXXXXXXXX
-                                if digits_only.startswith("8") and len(digits_only) == 11:
-                                    digits_only = "7" + digits_only[1:]
-
-                                if len(digits_only) == 10:
-                                    digits_only = "7" + digits_only
-
-                                if len(digits_only) != 11 or not digits_only.startswith("7"):
-                                    st.error("❌ Введите корректный номер: 11 цифр, начиная с 7 (например: 79991234567)")
-                                    st.stop()
-
-                                phone = digits_only
-
-                                # VK и TG
-                                vk = c_vk_raw.strip() if c_vk_raw else ""
-                                tg = c_tg_raw.strip().replace("@", "").replace("t.me/", "") if c_tg_raw else ""
-                                g_id = group_map.get(c_group) if c_group != "Без группы" else None
-
-                                run_query('''INSERT INTO clients 
-                                    (name, sex, phone, vk_id, tg_id, group_id) 
-                                    VALUES (?,?,?,?,?,?)''', 
-                                    (c_name, c_sex, phone, vk, tg, g_id))
-
-                                st.success("✅ Клиент добавлен!")
-                                st.rerun()
+        
+                # 👇 Часть 2 — Телефон (на отдельной строке)
+                c_phone_raw = st.text_input(
+                    "Телефон", 
+                    placeholder="Введите номер телефона",
+                    help="Введите номер в любом формате. Сохраняется как 7XXXXXXXXXX, отображается с маской."
+                )
+        
+                # 👇 Часть 3 — VK и Telegram в одну строку
+                col3, col4 = st.columns(2)
+                with col3:
+                    c_vk_raw = st.text_input("VK ID", placeholder="id123456 или username")
+                with col4:
+                    c_tg_raw = st.text_input("Telegram", placeholder="username (без @)")
+        
+                # 👇 Часть 4 — Группа
+                if groups_list:
+                    c_group = st.selectbox("Группа", options=["Без группы"] + groups_list)
+                else:
+                    c_group = "Без группы"
+                    st.info("Группы еще не созданы")
+        
+                # 👇 Кнопка
+                if st.form_submit_button("Сохранить клиента"):
+                    if c_name:
+                        if not c_phone_raw:
+                            st.error("Введите номер телефона")
                         else:
-                            st.error("Введите имя клиента")
+                            import re
+                            digits_only = re.sub(r'\D', '', c_phone_raw)
+        
+                            if digits_only.startswith("8") and len(digits_only) == 11:
+                                digits_only = "7" + digits_only[1:]
+                            if len(digits_only) == 10:
+                                digits_only = "7" + digits_only
+                            if len(digits_only) != 11 or not digits_only.startswith("7"):
+                                st.error("❌ Введите корректный номер: 11 цифр, начиная с 7 (например: 79991234567)")
+                                st.stop()
+                            phone = digits_only
+        
+                            vk = c_vk_raw.strip() if c_vk_raw else ""
+                            tg = c_tg_raw.strip().replace("@", "").replace("t.me/", "") if c_tg_raw else ""
+                            g_id = group_map.get(c_group) if c_group != "Без группы" else None
+        
+                            run_query('''INSERT INTO clients 
+                                (name, sex, phone, vk_id, tg_id, group_id) 
+                                VALUES (?,?,?,?,?,?)''', 
+                                (c_name, c_sex, phone, vk, tg, g_id))
+        
+                            st.success("✅ Клиент добавлен!")
+                            st.rerun()
+                    else:
+                        st.error("Введите имя клиента")
 
 
         elif action in ["Редактировать", "Удалить"]:
