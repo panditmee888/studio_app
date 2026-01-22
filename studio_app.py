@@ -284,8 +284,6 @@ if choice == "Клиенты и Группы":
                     edit_df = pd.DataFrame([selected_row])
                     edit_df['first_order_date'] = edit_df['first_order_date'].apply(format_date_display)
             
-                    st.info(f"Редактирование: #{selected_id} {selected_row['name']}")
-            
                     edited_client = st.data_editor(
                         edit_df[['id', 'name', 'sex', 'phone', 'vk_id', 'tg_id', 'group_name', 'first_order_date']],
                         column_config={
@@ -420,7 +418,6 @@ if choice == "Клиенты и Группы":
     clients_df_data = run_query(clients_query, tuple(params), fetch=True)
 
     if not clients_df_data.empty:
-        st.info(f"Найдено клиентов: {len(clients_df_data)}")
         
         # Подготовка ссылок и отображаемых текстов
         display_df = clients_df_data.copy()
