@@ -379,10 +379,10 @@ if choice == "Клиенты и Группы":
     # Поиск и фильтрация
     st.markdown("### 🔍 Поиск и фильтрация")
     search_col1, search_col2 = st.columns([2, 1])
-    with search_col1:
-        search_query = st.text_input("Поиск по имени, телефону, VK или Telegram", placeholder="Введите текст...")
-    with search_col2:
-        filter_group = st.selectbox("Фильтр по группе", ["Все"] + groups_list)
+with search_col1:
+    search_query = st.text_input("Поиск по имени, телефону, VK или Telegram", placeholder="Введите текст...")
+with search_col2:
+    filter_group = st.selectbox("Фильтр по группе", ["Все"] + groups_list)
 
     # Запрос клиентов
     clients_query = '''
@@ -403,20 +403,21 @@ if choice == "Клиенты и Группы":
     params = []
 
     if search_query:
-        # Приводим всё к нижнему регистру здесь
-        search_query_normalized = search_query.lower()
-
+        # ✅ 100% регистронезависимый поиск для кириллицы
+        # Явно преобразуем и запрос, и все столбцы в нижний регистр
+        search_pattern = f"%{search_query.lower()}%"
+    
         clients_query += ''' AND (
             LOWER(c.name) LIKE ? OR 
-            c.phone LIKE ? OR 
+            LOWER(c.phone) LIKE ? OR 
             LOWER(c.vk_id) LIKE ? OR 
             LOWER(c.tg_id) LIKE ?
         )'''
-        search_pattern = f"%{search_query_normalized}%"
-        params.extend([search_pattern, f"%{search_query}%", search_pattern, search_pattern])
+        params.extend([search_pattern] * 4)
 
     if filter_group != "Все":
-        clients_query += ' AND g.name = ?'
+        # ✅ Фильтр по группам тоже сделан нечувствительным к регистру
+        clients_query += ' AND LOWER(g.name) = LOWER(?)'
         params.append(filter_group)
 
     clients_query += ' ORDER BY c.id DESC'
