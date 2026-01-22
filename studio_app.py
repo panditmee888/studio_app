@@ -378,13 +378,14 @@ if choice == "Клиенты и Группы":
 
     # Поиск и фильтрация
     st.markdown("### 🔍 Поиск и фильтрация")
+
     search_col1, search_col2 = st.columns([2, 1])
     with search_col1:
         search_query = st.text_input("Поиск по имени, телефону, VK или Telegram", placeholder="Введите текст...")
     with search_col2:
         filter_group = st.selectbox("Фильтр по группе", ["Все"] + groups_list)
 
-    # Запрос клиентов
+    # Получаем всех клиентов
     clients_query = '''
     SELECT 
         c.id, 
@@ -397,47 +398,30 @@ if choice == "Клиенты и Группы":
         c.first_order_date
     FROM clients c 
     LEFT JOIN groups g ON c.group_id = g.id
-    WHERE 1=1
+    ORDER BY c.id DESC
     '''
+    clients_df_data = run_query(clients_query, fetch=True)
 
-    params = []
+    # --- Фильтрация на стороне Python (регистронезависимая, поддержка кириллицы) ---
+    if not clients_df_data.empty:
 
-    if search_query and len(search_query) > 0:
-        # ✅ Создаем ВСЕ возможные варианты регистра поискового запроса
-        # чтобы найти совпадение в любом случае
-        queries = [
-            search_query,                  # Как есть
-            search_query.lower(),          # Всё в нижнем регистре
-            search_query.upper(),          # Всё в верхнем регистре
-            search_query.capitalize(),     # Первая буква заглавная, остальные строчные
-            search_query[0].lower() + search_query[1:] if len(search_query)>1 else search_query.lower() # Первая буква строчная
-        ]
-    
-        # Добавляем все варианты в запрос
-        clients_query += ''' AND (
-            c.name LIKE ? OR c.name LIKE ? OR c.name LIKE ? OR c.name LIKE ? OR c.name LIKE ? OR
-            c.phone LIKE ? OR c.phone LIKE ? OR c.phone LIKE ? OR c.phone LIKE ? OR c.phone LIKE ? OR
-            c.vk_id LIKE ? OR c.vk_id LIKE ? OR c.vk_id LIKE ? OR c.vk_id LIKE ? OR c.vk_id LIKE ? OR
-            c.tg_id LIKE ? OR c.tg_id LIKE ? OR c.tg_id LIKE ? OR c.tg_id LIKE ? OR c.tg_id LIKE ?
-        )'''
-    
-        # Добавляем все шаблоны поиска в параметры
-        for q in queries:
-            params.extend([f"%{q}%"]*4)
+        if search_query.strip():
+            search_query_lower = search_query.strip().lower()
 
-    if filter_group != "Все":
-        # Аналогично делаем фильтр по группам нечувствительным к регистру
-        group_queries = [
-            filter_group,
-            filter_group.lower(),
-            filter_group.upper(),
-            filter_group.capitalize()
-        ]
-        clients_query += ' AND (' + ' OR g.name LIKE ?'*4 + ')'
-        params.extend([f"%{g}%" for g in group_queries])
+            # Приводим к строке и применяем str.contains(..., case=False)
+            clients_df_data = clients_df_data[
+                clients_df_data['name'].astype(str).str.lower().str.contains(search_query_lower, na=False) |
+                clients_df_data['phone'].astype(str).str.contains(search_query, na=False) |
+                clients_df_data['vk_id'].astype(str).str.lower().str.contains(search_query_lower, na=False) |
+                clients_df_data['tg_id'].astype(str).str.lower().str.contains(search_query_lower, na=False)
+            ]
 
-    clients_query += ' ORDER BY c.id DESC'
-    clients_df_data = run_query(clients_query, tuple(params), fetch=True)
+        if filter_group != "Все":
+            clients_df_data = clients_df_data[
+                clients_df_data["group_name"] == filter_group
+            ]
+        clients_df_data = run_query(clients_query, tuple(params), fetch=True)
+
 
     if not clients_df_data.empty:
         
