@@ -413,7 +413,7 @@ if choice == "Клиенты и Группы":
         params.extend([search_pattern] * 4)
 
     if filter_group != "Все":
-        clients_query += ' AND g.name = ?'
+        clients_query += ' AND LOWER(g.name) = LOWER(?)'
         params.append(filter_group)
 
     clients_query += ' ORDER BY c.id DESC'
