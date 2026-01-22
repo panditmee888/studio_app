@@ -4,10 +4,10 @@ import sqlite3
 from datetime import datetime, date, timedelta
 import re
 
---- КОНСТАНТЫ ---
+# --- КОНСТАНТЫ ---
 STATUS_LIST = ["В работе", "Ожидает оплаты", "Выполнен", "Оплачен"]
 
---- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 def normalize_phone(phone_str):
     """Приводит телефон к чистым цифрам для хранения в БД"""
     if not phone_str or pd.isna(phone_str):
