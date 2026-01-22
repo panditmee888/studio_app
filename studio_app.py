@@ -333,17 +333,22 @@ if choice == "Клиенты и Группы":
     if not clients_df_data.empty:
         st.info(f"Найдено клиентов: {len(clients_df_data)}")
         
+        # Подготовка данных
         display_df = clients_df_data.copy()
 
-        display_df['Телефон'] = display_df['phone'].apply(
+        # Телефон
+        display_df['phone_text'] = display_df['phone'].apply(format_phone)
+        display_df['phone_link'] = display_df['phone'].apply(
             lambda x: f"tel:+{''.join(filter(str.isdigit, str(x)))}" if x else None
         )
-        display_df['VK'] = display_df['vk_id'].apply(
-            lambda x: f"https://vk.com/{x}" if x else None
-        )
-        display_df['Telegram'] = display_df['tg_id'].apply(
-            lambda x: f"https://t.me/{x}" if x else None
-        )
+
+        # VK
+        display_df['vk_text'] = display_df['vk_id']
+        display_df['vk_link'] = display_df['vk_id'].apply(lambda x: f"https://vk.com/{x}" if x else None)
+
+        # Telegram
+        display_df['tg_text'] = display_df['tg_id']
+        display_df['tg_link'] = display_df['tg_id'].apply(lambda x: f"https://t.me/{x}" if x else None)
 
         display_df['Имя'] = display_df['name']
         display_df['Пол'] = display_df['sex']
@@ -352,31 +357,30 @@ if choice == "Клиенты и Группы":
 
         st.data_editor(
             display_df[[
-                'id', 'Имя', 'Пол', 'Телефон', 'VK', 'Telegram', 'Группа', 'Первая оплата'
-            ]],
+                'id', 'Имя', 'Пол',
+                'phone_link', 'vk_link', 'tg_link',
+                'Группа', 'Первая оплата'
+            ]].rename(columns={
+                'id': 'ID',
+                'phone_link': 'Телефон',
+                'vk_link': 'VK',
+                'tg_link': 'Telegram',
+            }),
             column_config={
-                'Телефон': st.column_config.LinkColumn(
-                    "Телефон",
-                    display_text=lambda val: format_phone(val),
+                "Телефон": st.column_config.LinkColumn(
+                    label="Телефон", icon="📞"
                 ),
-                'VK': st.column_config.LinkColumn(
-                    "VK",
-                    display_text=lambda val: val.replace("https://", "")
+                "VK": st.column_config.LinkColumn(
+                    label="VK", icon="🌐"
                 ),
-                'Telegram': st.column_config.LinkColumn(
-                    "Telegram",
-                    display_text=lambda val: val.replace("https://t.me/", "")
-                ),
-                'Первая оплата': st.column_config.TextColumn("Первая оплата"),
-                'Имя': st.column_config.TextColumn("Имя"),
-                'Пол': st.column_config.TextColumn("Пол"),
-                'Группа': st.column_config.TextColumn("Группа"),
-                'id': st.column_config.NumberColumn("ID", disabled=True),
+                "Telegram": st.column_config.LinkColumn(
+                    label="Telegram", icon="✈️"
+                )
             },
             hide_index=True,
             use_container_width=True,
-            disabled=True,  # <== ВАЖНО: делаешь таблицу только для чтения!
-            key="client_list_display"
+            disabled=True,
+            key="clients_readonly_editor"
         )
         
         st.markdown("---")
