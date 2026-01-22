@@ -716,7 +716,7 @@ elif choice == "Заказы и услуги":
 
             # Отображаем контент в зависимости от выбранного действия
             if service_action == "Добавить":
-                add_col1, add_col2, add_col3, add_col4 = st.columns([6, 3, 3, 2])
+                add_col1, add_col2, add_col3, add_col4 = st.columns([6, 3, 2, 2])
                 with add_col1:
                     new_service = st.selectbox("Услуга", srv_list, key="new_service")
                 with add_col2:
