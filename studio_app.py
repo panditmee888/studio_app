@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 from datetime import datetime, date, timedelta
+import streamlit.components.v1 as components
+import uuid
 import re
 
 # --- КОНСТАНТЫ ---
@@ -241,12 +243,57 @@ if choice == "Клиенты и Группы":
                 # 👇 Часть 2 — Телефон, VK и Telegram в одну строку
                 col4, col5, col6 = st.columns(3)
                 with col4:
-                        c_phone_raw = st.text_input(
-                        "Телефон", 
-                        placeholder="Введите номер телефона",
-                        mask="+7 999 999-99-99",
-                        help="Введите номер в любом формате. Сохраняется как 7XXXXXXXXXX, отображается с маской."
-                )
+                    st.markdown("**Телефон**")
+                
+                    phone_input_id = f"phone_{uuid.uuid4().hex}"
+                
+                    # Этот блок HTML вставляет input с маской +7 (000) 000-00-00
+                    components.html(f"""
+                    <script src="https://unpkg.com/imask"></script>
+                
+                    <style>
+                    #{phone_input_id} {{
+                        width: 100%;
+                        padding: 0.45rem;
+                        font-size: 0.95rem;
+                        border: 1px solid #ccc;
+                        border-radius: 0.25rem;
+                    }}
+                    #{phone_input_id}.invalid {{
+                        border-color: red;
+                        background-color: #ffe6e6;
+                    }}
+                    </style>
+                
+                    <input id="{phone_input_id}" placeholder="+7 (___) ___-__-__" />
+                
+                    <script>
+                      const el = document.getElementById("{phone_input_id}");
+                      const maskOptions = {{
+                        mask: '+{7} (000) 000-00-00',
+                        lazy: false
+                      }};
+                      const mask = IMask(el, maskOptions);
+                
+                      const validate = () => {{
+                        const digits = mask.unmaskedValue;
+                        if (digits.length === 10) {{
+                          el.classList.remove('invalid');
+                        }} else {{
+                          el.classList.add('invalid');
+                        }}
+                      }};
+                
+                      el.addEventListener('input', () => {{
+                        validate();
+                        window.parent.postMessage({{ type: 'streamlit:setComponentValue', value: mask.unmaskedValue }}, '*');
+                      }});
+                      validate();
+                    </script>
+                    """, height=70, key="phone_masked_input")
+                
+                # Получаем введённый телефон из session_state
+                c_phone_raw = st.session_state.get(phone_input_id)
                 with col5:
                     c_vk_raw = st.text_input("VK ID", placeholder="id123456 или username")
                 with col6:
@@ -255,25 +302,25 @@ if choice == "Клиенты и Группы":
                 # 👇 Кнопка
                 if st.form_submit_button("Сохранить клиента"):
                     if c_name:
-                        if not c_phone_raw or len(c_phone_raw) < 18: # ✅ Проверяем, что номер введен полностью
-                            st.error("Введите полный номер телефона в формате +7 999 999-99-99")
-                        else:
-                            digits_only = ''.join(filter(str.isdigit, c_phone_raw))
-            
-                            # ✅ Финальная нормализация в формат 7XXXXXXXXXX
-                            if len(digits_only) == 11 and digits_only.startswith("8"):
-                                digits_only = "7" + digits_only[1:]
-                            phone = digits_only[:11] # ✅ Гарантируем правильную длину
-            
+                        if not c_phone_raw:
+                            st.error("Введите номер телефона")
+                            st.stop()
+                        
+                        if len(c_phone_raw) != 10 or not c_phone_raw.isdigit():
+                            st.error("❌ Введите корректный номер: 10 цифр после +7")
+                            st.stop()
+                        
+                        phone = "7" + c_phone_raw  # Сохраняем как 7XXXXXXXXXX (11 цифр)
+        
                             vk = c_vk_raw.strip() if c_vk_raw else ""
                             tg = c_tg_raw.strip().replace("@", "").replace("t.me/", "") if c_tg_raw else ""
                             g_id = group_map.get(c_group) if c_group != "Без группы" else None
-            
+        
                             run_query('''INSERT INTO clients 
                                 (name, sex, phone, vk_id, tg_id, group_id) 
                                 VALUES (?,?,?,?,?,?)''', 
                                 (c_name, c_sex, phone, vk, tg, g_id))
-            
+        
                             st.success("✅ Клиент добавлен!")
                             st.rerun()
                     else:
