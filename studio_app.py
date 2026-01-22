@@ -658,17 +658,19 @@ elif choice == "Заказы и услуги":
     with col_left:
         st.markdown("### Управление заказом")
 
+        # Используем st.session_state для установки начального значения radio
         order_mode = st.radio(
             "Действие с заказом",
             ["Добавить", "Редактировать", "Удалить"],
             horizontal=True,
-            key="order_mode"
+            key="order_mode" # Ссылка на session_state.order_mode
         )
 
+        # Используем st.session_state для установки начального значения selectbox
         selected_client_name = st.selectbox(
             "Клиент",
             options=["— Выберите клиента —"] + client_options,
-            key="order_client"
+            key="order_client" # Ссылка на session_state.order_client
         )
 
         col_date, col_status = st.columns(2)
@@ -685,8 +687,8 @@ elif choice == "Заказы и услуги":
             client_id = client_map.get(selected_client_name)
             if client_id:
                 client_orders = run_query("""
-                    SELECT o.id, o.execution_date, o.status 
-                    FROM orders o WHERE o.client_id = ? 
+                    SELECT o.id, o.execution_date, o.status
+                    FROM orders o WHERE o.client_id = ?
                     ORDER BY o.execution_date DESC
                 """, (client_id,), fetch=True)
 
@@ -695,10 +697,13 @@ elif choice == "Заказы и услуги":
                         f"№{row['id']} | {format_date_display(row['execution_date'])} | {row['status']}"
                         for _, row in client_orders.iterrows()
                     ]
-                    # Используем index, чтобы избежать ошибок с None
-                    default_idx = 0
-                    if "selected_order_index" in st.session_state:
-                        default_idx = st.session_state.selected_order_index
+
+                    # Используем index из session_state, если он был установлен из таблицы справа
+                    # или если это был первый запуск (тогда default_idx = 0)
+                    default_idx = st.session_state.selected_order_index
+                    # Убедимся, что индекс в допустимом диапазоне
+                    if not (0 <= default_idx < len(order_labels)):
+                        default_idx = 0
 
                     selected_order_label = st.selectbox(
                         "Выберите заказ",
@@ -709,11 +714,30 @@ elif choice == "Заказы и услуги":
 
                     # Безопасное извлечение ID
                     try:
+                        # Сохраняем текущее значение для возможности сравнения после rerun
+                        if st.session_state.sel_existing_order_value != selected_order_label:
+                            st.session_state.sel_existing_order_value = selected_order_label
+                            # Если пользователь выбрал вручную, сбрасываем индекс, чтобы он не конфликтовал
+                            # со сбросом из правой таблицы при следующем reran (хотя здесь это не столь критично)
+                            st.session_state.selected_order_index = order_labels.index(selected_order_label)
+
+
                         order_id = int(selected_order_label.split()[0][1:])
-                    except:
+                        # При выборе заказа из селектбокса, если дата исполнения еще не была заполнена
+                        # (например, при первом выборе), мы можем обновить ее.
+                        # Но это может быть нежелательно, если пользователь уже менял дату.
+                        # Лучше оставить ее как есть или добавить логику загрузки существующей даты.
+                        # Для простоты сейчас это не делаем.
+                        # row_for_date_status = client_orders[client_orders['id'] == order_id].iloc[0]
+                        # execution_date = pd.to_datetime(row_for_date_status['execution_date']).date()
+                        # status = row_for_date_status['status']
+
+                    except (ValueError, IndexError):
                         order_id = None
                 else:
                     st.info("У клиента нет заказов")
+            else:
+                st.info("Выберите действительного клиента")
 
         # Экспандер только в режимах Редактировать/Удалить
         if order_mode != "Добавить":
@@ -730,7 +754,7 @@ elif choice == "Заказы и услуги":
                     )
 
                     current_items = run_query("""
-                        SELECT id, service_name, payment_date, amount, hours 
+                        SELECT id, service_name, payment_date, amount, hours
                         FROM order_items WHERE order_id = ?
                     """, (order_id,), fetch=True)
 
@@ -797,16 +821,17 @@ elif choice == "Заказы и услуги":
                                 st.success("Услуга удалена")
                                 st.rerun()
 
-                    # Состав заказа и итоги (теперь в самом низу)
-                    st.markdown("---")
+                    # --- ЭТОТ БЛОК ПЕРЕМЕЩЕН В КОНЕЦ ЭКСПАНДЕРА ---
+                    # Состав заказа и Итого
                     items_df = run_query("""
-                        SELECT service_name, payment_date, amount, hours 
+                        SELECT service_name, payment_date, amount, hours
                         FROM order_items WHERE order_id = ? ORDER BY payment_date
                     """, (order_id,), fetch=True)
 
                     total = run_query("SELECT total_amount FROM orders WHERE id=?", (order_id,), fetch=True)
                     total_amount = total.iloc[0]['total_amount'] if not total.empty else 0
 
+                    st.markdown("---") # Разделитель
                     if not items_df.empty:
                         disp = items_df.copy()
                         disp['payment_date'] = disp['payment_date'].apply(format_date_display)
@@ -827,6 +852,8 @@ elif choice == "Заказы и услуги":
                         st.success(f"**Итого: {format_currency(total_amount)} ₽**")
                     else:
                         st.info("Услуги ещё не добавлены")
+                    # --- КОНЕЦ ПЕРЕМЕЩЕННОГО БЛОКА ---
+
 
         # Кнопки действий
         if order_mode == "Добавить":
@@ -838,6 +865,8 @@ elif choice == "Заказы и услуги":
                     run_query("INSERT INTO orders (client_id, execution_date, status) VALUES (?, ?, ?)",
                               (cid, execution_date.strftime("%Y-%m-%d"), status))
                     st.success("Заказ создан! Перейдите в режим Редактировать, чтобы добавить услуги.")
+                    # После создания нового заказа, можно автоматически переключить на редактирование
+                    st.session_state.order_mode = "Редактировать"
                     st.rerun()
 
         elif order_mode == "Редактировать" and order_id:
@@ -849,9 +878,15 @@ elif choice == "Заказы и услуги":
 
         elif order_mode == "Удалить" and order_id:
             st.warning("Удалить весь заказ?")
-            if st.button("Подтвердить удаление", use_container_width=True, type="secondary"):
+            if st.button("Подтвердить удаление", use_container_width=True, type="secondary'):
+                # Сначала удаляем связанные услуги, если они есть
+                run_query("DELETE FROM order_items WHERE order_id=?", (order_id,))
                 run_query("DELETE FROM orders WHERE id=?", (order_id,))
                 st.success("Заказ удалён")
+                # После удаления сбрасываем выбранный заказ и режим
+                st.session_state.order_mode = "Добавить"
+                st.session_state.order_client = "— Выберите клиента —"
+                st.session_state.selected_order_index = 0
                 st.rerun()
 
     # Правая колонка — таблица всех заказов (кликабельная!)
@@ -859,7 +894,7 @@ elif choice == "Заказы и услуги":
         st.markdown("### Все заказы")
 
         all_orders = run_query("""
-            SELECT o.id, c.name as client_name, o.execution_date, o.status, o.total_amount, o.client_id
+            SELECT o.id, c.name as client_name, o.execution_date, o.status, o.total_amount
             FROM orders o
             JOIN clients c ON o.client_id = c.id
             ORDER BY o.execution_date DESC
@@ -871,7 +906,7 @@ elif choice == "Заказы и услуги":
             disp['total_amount'] = disp['total_amount'].apply(lambda x: f"{format_currency(x)} ₽" if x else "0 ₽")
 
             # Кликабельная таблица
-            event = st.dataframe(
+            selected_row = st.dataframe(
                 disp.rename(columns={
                     "id": "№",
                     "client_name": "Клиент",
@@ -885,35 +920,40 @@ elif choice == "Заказы и услуги":
                 selection_mode="single-row"
             )
 
-            # Обработка клика по таблице
-            if event.selection.rows:
-                idx = event.selection.rows[0]
-                selected_order = all_orders.iloc[idx]
-                order_id_selected = selected_order['id']
-                client_name_selected = selected_order['client_name']
+            if selected_row.selection.rows:
+                idx = selected_row.selection.rows[0]
+                selected_order_data = all_orders.iloc[idx]
+                order_id_to_select = selected_order_data['id']
+                client_name_to_select = selected_order_data['client_name']
 
-                # Переключаем только если текущий режим - Редактировать или Удалить
-                # Или если режим Добавить - автоматически переключаем на Редактировать
-                if st.session_state.get('order_mode') == "Добавить":
-                    st.session_state.order_mode = 1  # индекс "Редактировать"
-                
-                st.session_state.order_client = client_name_selected
+                # Автоматически переключаем режим и выбираем заказ
+                st.session_state.order_mode = "Редактировать"
+                st.session_state.order_client = client_name_to_select
 
-                # Сохраняем индекс для selectbox
-                client_id_selected = selected_order['client_id']
-                client_orders = run_query("""
-                    SELECT id FROM orders 
-                    WHERE client_id = ? 
-                    ORDER BY execution_date DESC
-                """, (client_id_selected,), fetch=True)
-                
-                order_ids = client_orders['id'].tolist()
-                try:
-                    st.session_state.selected_order_index = order_ids.index(order_id_selected)
-                except:
+                # Теперь самое важное: найти правильный индекс для selectbox
+                client_id_to_select = client_map.get(client_name_to_select)
+                if client_id_to_select:
+                    # Выполняем тот же запрос, что и для selectbox 'Выберите заказ'
+                    orders_for_client_df = run_query("""
+                        SELECT o.id, o.execution_date, o.status
+                        FROM orders o WHERE o.client_id = ?
+                        ORDER BY o.execution_date DESC
+                    """, (client_id_to_select,), fetch=True)
+
+                    if not orders_for_client_df.empty:
+                        try:
+                            # Находим позиционный индекс выбранного заказа в DataFrame
+                            # Этот индекс будет соответствовать индексу в списке order_labels
+                            select_idx = orders_for_client_df[orders_for_client_df['id'] == order_id_to_select].index[0]
+                            st.session_state.selected_order_index = select_idx
+                        except IndexError:
+                            st.session_state.selected_order_index = 0 # Fallback, если что-то пошло не так
+                    else:
+                        st.session_state.selected_order_index = 0
+                else:
                     st.session_state.selected_order_index = 0
 
-                st.rerun()
+                st.rerun() # Перезапускаем приложение, чтобы применились изменения session_state
         else:
             st.info("Заказов нет")
 
