@@ -653,7 +653,7 @@ elif choice == "Заказы и услуги":
     services_df = run_query("SELECT name FROM services_catalog ORDER BY name", fetch=True)
     service_options = services_df['name'].tolist() if not services_df.empty else []
 
-    col_left, col_right = st.columns([1.9, 1.1])
+    col_left, col_right = st.columns(2)
 
     with col_left:
         st.markdown("### Управление заказом")
@@ -721,36 +721,6 @@ elif choice == "Заказы и услуги":
                 if not order_id:
                     st.info("Выберите заказ выше ↑")
                 else:
-                    # Состав заказа
-                    items_df = run_query("""
-                        SELECT service_name, payment_date, amount, hours 
-                        FROM order_items WHERE order_id = ? ORDER BY payment_date
-                    """, (order_id,), fetch=True)
-
-                    total = run_query("SELECT total_amount FROM orders WHERE id=?", (order_id,), fetch=True)
-                    total_amount = total.iloc[0]['total_amount'] if not total.empty else 0
-
-                    if not items_df.empty:
-                        disp = items_df.copy()
-                        disp['payment_date'] = disp['payment_date'].apply(format_date_display)
-                        disp['amount'] = disp['amount'].apply(lambda x: f"{format_currency(x)} ₽")
-                        disp['hours'] = disp['hours'].apply(lambda x: f"{float(x):.1f}" if pd.notna(x) else "—")
-
-                        st.markdown("**Состав заказа**")
-                        st.dataframe(
-                            disp.rename(columns={
-                                "service_name": "Услуга",
-                                "payment_date": "Оплата",
-                                "amount": "Сумма",
-                                "hours": "Часы"
-                            })[["Услуга", "Оплата", "Сумма", "Часы"]],
-                            use_container_width=True,
-                            hide_index=True
-                        )
-                        st.success(f"**Итого: {format_currency(total_amount)} ₽**")
-                    else:
-                        st.info("Услуги ещё не добавлены")
-
                     # Управление услугами
                     service_mode = st.radio(
                         "Действие с услугой",
@@ -827,6 +797,37 @@ elif choice == "Заказы и услуги":
                                 st.success("Услуга удалена")
                                 st.rerun()
 
+                    # Состав заказа и итоги (теперь в самом низу)
+                    st.markdown("---")
+                    items_df = run_query("""
+                        SELECT service_name, payment_date, amount, hours 
+                        FROM order_items WHERE order_id = ? ORDER BY payment_date
+                    """, (order_id,), fetch=True)
+
+                    total = run_query("SELECT total_amount FROM orders WHERE id=?", (order_id,), fetch=True)
+                    total_amount = total.iloc[0]['total_amount'] if not total.empty else 0
+
+                    if not items_df.empty:
+                        disp = items_df.copy()
+                        disp['payment_date'] = disp['payment_date'].apply(format_date_display)
+                        disp['amount'] = disp['amount'].apply(lambda x: f"{format_currency(x)} ₽")
+                        disp['hours'] = disp['hours'].apply(lambda x: f"{float(x):.1f}" if pd.notna(x) else "—")
+
+                        st.markdown("**Состав заказа**")
+                        st.dataframe(
+                            disp.rename(columns={
+                                "service_name": "Услуга",
+                                "payment_date": "Оплата",
+                                "amount": "Сумма",
+                                "hours": "Часы"
+                            })[["Услуга", "Оплата", "Сумма", "Часы"]],
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                        st.success(f"**Итого: {format_currency(total_amount)} ₽**")
+                    else:
+                        st.info("Услуги ещё не добавлены")
+
         # Кнопки действий
         if order_mode == "Добавить":
             if st.button("Создать заказ", use_container_width=True, type="primary"):
@@ -858,7 +859,7 @@ elif choice == "Заказы и услуги":
         st.markdown("### Все заказы")
 
         all_orders = run_query("""
-            SELECT o.id, c.name as client_name, o.execution_date, o.status, o.total_amount
+            SELECT o.id, c.name as client_name, o.execution_date, o.status, o.total_amount, o.client_id
             FROM orders o
             JOIN clients c ON o.client_id = c.id
             ORDER BY o.execution_date DESC
@@ -870,7 +871,7 @@ elif choice == "Заказы и услуги":
             disp['total_amount'] = disp['total_amount'].apply(lambda x: f"{format_currency(x)} ₽" if x else "0 ₽")
 
             # Кликабельная таблица
-            selected_row = st.dataframe(
+            event = st.dataframe(
                 disp.rename(columns={
                     "id": "№",
                     "client_name": "Клиент",
@@ -884,18 +885,28 @@ elif choice == "Заказы и услуги":
                 selection_mode="single-row"
             )
 
-            if selected_row.selection.rows:
-                idx = selected_row.selection.rows[0]
+            # Обработка клика по таблице
+            if event.selection.rows:
+                idx = event.selection.rows[0]
                 selected_order = all_orders.iloc[idx]
                 order_id_selected = selected_order['id']
                 client_name_selected = selected_order['client_name']
 
-                # Автоматически переключаем режим и выбираем заказ
-                st.session_state.order_mode = "Редактировать"
+                # Переключаем только если текущий режим - Редактировать или Удалить
+                # Или если режим Добавить - автоматически переключаем на Редактировать
+                if st.session_state.get('order_mode') == "Добавить":
+                    st.session_state.order_mode = 1  # индекс "Редактировать"
+                
                 st.session_state.order_client = client_name_selected
 
                 # Сохраняем индекс для selectbox
-                client_orders = run_query("SELECT id FROM orders WHERE client_id = ?", (client_map[client_name_selected],), fetch=True)
+                client_id_selected = selected_order['client_id']
+                client_orders = run_query("""
+                    SELECT id FROM orders 
+                    WHERE client_id = ? 
+                    ORDER BY execution_date DESC
+                """, (client_id_selected,), fetch=True)
+                
                 order_ids = client_orders['id'].tolist()
                 try:
                     st.session_state.selected_order_index = order_ids.index(order_id_selected)
