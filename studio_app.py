@@ -403,17 +403,20 @@ if choice == "Клиенты и Группы":
     params = []
 
     if search_query:
+        # Приводим всё к нижнему регистру здесь
+        search_query_normalized = search_query.lower()
+
         clients_query += ''' AND (
-            c.name COLLATE NOCASE LIKE ? OR 
+            LOWER(c.name) LIKE ? OR 
             c.phone LIKE ? OR 
-            c.vk_id COLLATE NOCASE LIKE ? OR 
-            c.tg_id COLLATE NOCASE LIKE ?
+            LOWER(c.vk_id) LIKE ? OR 
+            LOWER(c.tg_id) LIKE ?
         )'''
-        search_pattern = f"%{search_query}%"
-        params.extend([search_pattern] * 4)
+        search_pattern = f"%{search_query_normalized}%"
+        params.extend([search_pattern, f"%{search_query}%", search_pattern, search_pattern])
 
     if filter_group != "Все":
-        clients_query += ' AND g.name LIKE ? COLLATE NOCASE'
+        clients_query += ' AND g.name = ?'
         params.append(filter_group)
 
     clients_query += ' ORDER BY c.id DESC'
