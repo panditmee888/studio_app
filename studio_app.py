@@ -447,7 +447,6 @@ if choice == "Клиенты и Группы":
 
 
     # Поиск и фильтрация
-    st.markdown("### 🔍 Поиск и фильтрация")
 
     search_col1, search_col2 = st.columns([2, 1])
     with search_col1:
@@ -639,218 +638,239 @@ elif choice == "Прайс-лист Услуг":
 elif choice == "Заказы и услуги":
     st.subheader("📦 Управление заказами и их наполнением")
 
-    # Справочник клиентов
+    # --- Подготовка справочных данных ---
     clients_df = run_query("SELECT id, name FROM clients", fetch=True)
-    client_names = clients_df['name'].tolist()
+    client_names = clients_df['name'].tolist() if not clients_df.empty else []
     client_map = dict(zip(clients_df['name'], clients_df['id']))
     client_map_reverse = dict(zip(clients_df['id'], clients_df['name']))
 
-    # --- Управление заказами ---
-    with st.expander("📋 Управление заказами"):
-        order_action = st.radio("Выберите действие", ["Добавить", "Редактировать", "Удалить"], horizontal=True, key="order_action_radio")
+    services_cat = run_query("SELECT name FROM services_catalog", fetch=True)
+    srv_list = services_cat['name'].tolist() if not services_cat.empty else []
 
-        orders_df = run_query('''
-            SELECT o.id, o.client_id, c.name as client_name, o.execution_date, o.status, o.total_amount
-            FROM orders o
-            JOIN clients c ON o.client_id = c.id
-            ORDER BY o.id DESC
-        ''', fetch=True)
+    # --- Основная разметка на две колонки ---
+    left_col, right_col = st.columns([2, 1])
 
-        # Добавление заказа
-        if order_action == "Добавить":
-            with st.form("add_order_form"):
-                col1, col2, col3 = st.columns([3, 2, 2])
-                with col1:
-                    new_client = st.selectbox("Клиент", client_names)
-                with col2:
-                    new_date = st.date_input("Дата исполнения", value=date.today())
-                with col3:
-                    new_status = st.selectbox("Статус", STATUS_LIST)
-
-                if st.form_submit_button("Создать заказ"):
-                    c_id = client_map[new_client]
-                    run_query("INSERT INTO orders (client_id, execution_date, status) VALUES (?,?,?)",
-                              (c_id, new_date.strftime("%Y-%m-%d"), new_status))
-                    st.success("✅ Заказ создан")
-                    st.rerun()
-
-        # Редактирование или удаление
-        elif order_action in ["Редактировать", "Удалить"]:
-            if orders_df.empty:
-                st.info("Нет заказов")
-            else:
-                order_options = [f"#{row['id']} {row['client_name']} ({format_date_display(row['execution_date'])})" for _, row in orders_df.iterrows()]
-                selected_order_label = st.selectbox("Выберите заказ", order_options, key="selected_order")
-                selected_id = int(selected_order_label.split()[0][1:])
-                selected_row = orders_df[orders_df['id'] == selected_id].iloc[0]
-                order_edit_df = pd.DataFrame([selected_row])
-
-                if order_action == "Редактировать":
-                    st.markdown("#### ✏️ Редактирование выбранного заказа")
-
-                    order_edit_df['execution_date'] = order_edit_df['execution_date'].apply(format_date_display)
-
-                    edited_order = st.data_editor(
-                        order_edit_df[['id', 'client_name', 'execution_date', 'status']],
-                        column_config={
-                            "id": st.column_config.NumberColumn("ID", disabled=True),
-                            "client_name": st.column_config.SelectboxColumn("Клиент", options=client_names),
-                            "execution_date": st.column_config.TextColumn("Дата исполнения"),
-                            "status": st.column_config.SelectboxColumn("Статус", options=STATUS_LIST)
-                        },
-                        hide_index=True,
-                        use_container_width=True,
-                        key="order_editor"
-                    )
-
-                    if not edited_order.equals(order_edit_df):
-                        row = edited_order.iloc[0]
-                        date_exec = parse_date_to_db(row["execution_date"])
-                        client_id = client_map[row["client_name"]]
-
-                        run_query('''
-                            UPDATE orders SET client_id=?, execution_date=?, status=? WHERE id=?
-                        ''', (client_id, date_exec, row["status"], selected_id))
-                        st.success("✅ Заказ обновлён")
-                        st.rerun()
-
-                elif order_action == "Удалить":
-                    st.warning(f"Вы собираетесь удалить заказ #{selected_id} клиента {selected_row['client_name']}")
-                    if st.button("🗑️ Подтвердить удаление заказа"):
-                        run_query("DELETE FROM orders WHERE id=?", (selected_id,))
-                        st.success("✅ Заказ удалён")
-                        st.rerun()
-
-    # --- Работа с услугами в заказе ---
-    st.markdown("---")
-    st.subheader("🧾 Услуги выбранного заказа")
-
-    # Получаем актуальный список заказов
-    orders_df = run_query("SELECT o.id, c.name FROM orders o JOIN clients c ON o.client_id = c.id ORDER BY o.id DESC", fetch=True)
-
-    if not orders_df.empty:
-        # 1. Выбор заказа для работы с услугами
-        orders_df["label"] = orders_df.apply(lambda x: f"#{x['id']} {x['name']}", axis=1)
-        selected_label = st.selectbox("Выберите заказ", orders_df['label'], key="select_for_details")
-        order_id = int(selected_label.split()[0][1:])
-
-        # Получаем client_id этого заказа
-        cur_client_id = run_query("SELECT client_id FROM orders WHERE id=?", (order_id,), fetch=True).iloc[0]["client_id"]
-
-        # 2. Добавление услуги
-        services_cat = run_query("SELECT name FROM services_catalog", fetch=True)
-        srv_list = services_cat['name'].tolist() if not services_cat.empty else []
-
-        with st.form("add_service_to_order"):
-            st.markdown("#### ➕ Добавить услугу в заказ")
-            col1, col2 = st.columns(2)
-            service = st.selectbox("Услуга", srv_list)
-            pay_date = st.date_input("Дата оплаты", value=date.today(), key="pay_date")
-            with col1:
-                amount_raw = st.text_input("Сумма ₽", placeholder="10 000")
-            with col2:
-                hours_raw = st.text_input("Кол-во часов", placeholder="1.5")
-
-            if st.form_submit_button("Добавить услугу"):
-                amount = parse_currency(amount_raw)
-                try:
-                    hours = float(hours_raw.replace(",", "."))
-                except:
-                    hours = 0.0
-
-                run_query(
-                    "INSERT INTO order_items (order_id, service_name, payment_date, amount, hours) VALUES (?,?,?,?,?)",
-                    (order_id, service, pay_date.strftime("%Y-%m-%d"), amount, hours)
-                )
-
-                # Обновим сумму заказа
-                total = run_query(
-                    "SELECT SUM(amount) as total FROM order_items WHERE order_id=?",
-                    (order_id,), fetch=True
-                )
-                total_sum = total["total"].iloc[0] if not total.empty else 0.0
-                run_query("UPDATE orders SET total_amount=? WHERE id=?", (total_sum, order_id))
-
-                # Обновим дату первого заказа клиента
-                if cur_client_id:
-                    update_client_first_order_date(cur_client_id)
-
-                st.success("✅ Услуга добавлена")
-                st.rerun()
-
-        # 3. Таблица услуг в заказе
-        st.markdown("#### 📋 Состав заказа")
-
-        items_df = run_query(
-            "SELECT id, service_name, payment_date, amount, hours FROM order_items WHERE order_id=?",
-            (order_id,), fetch=True
+    with left_col:
+        # 1. Выбор действия с заказом
+        st.markdown("### 🎯 Действие с заказом")
+        order_action = st.radio(
+            "Выберите действие", 
+            ["Добавить", "Редактировать", "Удалить"], 
+            horizontal=True, 
+            key="order_action_radio"
         )
 
-        if not items_df.empty:
-            detail_df = items_df.copy()
-            detail_df['payment_date'] = detail_df['payment_date'].apply(format_date_display)
-            detail_df['amount'] = detail_df['amount'].apply(lambda x: f"{format_currency(x)} ₽")
-            detail_df['hours'] = detail_df['hours'].apply(lambda x: f"{float(x):.1f}" if pd.notna(x) else "0.0")
+        selected_order_id = None
+        order_data = None
 
-            st.dataframe(
-                detail_df.rename(columns={
-                    "service_name": "Услуга",
-                    "payment_date": "Дата оплаты",
-                    "amount": "Сумма",
-                    "hours": "Часы"
-                }),
-                use_container_width=True,
-                hide_index=True
-            )
+        # 2. Поле выбора клиента
+        st.markdown("---")
+        if client_names:
+            if order_action == "Добавить":
+                selected_client = st.selectbox("🧑 Клиент", client_names, key="new_order_client")
+            else:
+                # Для редактирования/удаления сначала выбираем заказ
+                orders_df = run_query('''
+                    SELECT o.id, o.client_id, c.name as client_name, o.execution_date, o.status, o.total_amount
+                    FROM orders o
+                    JOIN clients c ON o.client_id = c.id
+                    ORDER BY o.id DESC
+                ''', fetch=True)
 
-            st.markdown("#### ✏️ Редактирование услуги")
+                if orders_df.empty:
+                    st.info("❌ Нет созданных заказов")
+                else:
+                    order_options = [f"#{row['id']} {row['client_name']} ({format_date_display(row['execution_date'])})" for _, row in orders_df.iterrows()]
+                    selected_order_label = st.selectbox("Выберите заказ", order_options, key="selected_order")
+                    selected_order_id = int(selected_order_label.split()[0][1:])
+                    order_data = orders_df[orders_df['id'] == selected_order_id].iloc[0]
+                    selected_client = st.selectbox("🧑 Клиент", client_names, index=client_names.index(order_data['client_name']), key="edit_order_client")
 
-            item_options = [f"#{row['id']} {row['service_name']} — {format_date_display(row['payment_date'])}" for _, row in items_df.iterrows()]
-            selected_item = st.selectbox("Выберите услугу", item_options, key="item_edit_selector")
-            selected_item_id = int(selected_item.split()[0][1:])
-            item_row = items_df[items_df['id'] == selected_item_id].iloc[0]
-
-            edit_item_df = pd.DataFrame([item_row])
-            edited_item = st.data_editor(
-                edit_item_df,
-                column_config={
-                    "id": st.column_config.NumberColumn("ID", disabled=True),
-                    "service_name": st.column_config.SelectboxColumn("Услуга", options=srv_list),
-                    "payment_date": st.column_config.TextColumn("Дата оплаты"),
-                    "amount": st.column_config.NumberColumn("Сумма", format="%.0f"),
-                    "hours": st.column_config.NumberColumn("Часы", format="%.1f")
-                },
-                hide_index=True,
-                use_container_width=True,
-                key="edit_service_editor"
-            )
-
-            if not edited_item.equals(edit_item_df):
-                row = edited_item.iloc[0]
-                pay_date = parse_date_to_db(row["payment_date"])
-                run_query('''
-                    UPDATE order_items
-                    SET service_name=?, payment_date=?, amount=?, hours=?
-                    WHERE id=?
-                ''', (row["service_name"], pay_date, row["amount"], row["hours"], selected_item_id))
-
-                # Пересчёт суммы заказа
-                total = run_query(
-                    "SELECT SUM(amount) as total FROM order_items WHERE order_id=?",
-                    (order_id,), fetch=True
-                )
-                total_sum = total["total"].iloc[0] if not total.empty else 0.0
-                run_query("UPDATE orders SET total_amount=? WHERE id=?", (total_sum, order_id))
-
-                if cur_client_id:
-                    update_client_first_order_date(cur_client_id)
-
-                st.success("✅ Изменения сохранены")
-                st.rerun()
         else:
-            st.info("В заказе нет добавленных услуг.")
-    else:
-        st.info("Нет заказов для отображения")
+            st.error("⚠️ Сначала создайте хотя бы одного клиента в разделе 'Клиенты и группы'")
+
+        # 3. Дата исполнения и Статус в одну строку
+        col_date, col_status = st.columns(2)
+        with col_date:
+            if order_action == "Добавить" or not selected_order_id:
+                execution_date = st.date_input("📅 Дата исполнения", value=date.today())
+            else:
+                execution_date = st.date_input("📅 Дата исполнения", value=datetime.strptime(order_data['execution_date'], "%Y-%m-%d").date())
+
+        with col_status:
+            if order_action == "Добавить" or not selected_order_id:
+                order_status = st.selectbox("🏷️ Статус", STATUS_LIST)
+            else:
+                order_status = st.selectbox("🏷️ Статус", STATUS_LIST, index=STATUS_LIST.index(order_data['status']))
+
+        # 4. Экспандер Управление услугами (открытый по умолчанию)
+        st.markdown("---")
+        with st.expander("🛠️ Управление услугами", expanded=True):
+            service_action = st.radio(
+                "Действие с услугой",
+                ["Добавить", "Редактировать", "Удалить"],
+                horizontal=True,
+                key="service_action_radio"
+            )
+
+            service_selected_id = None
+            service_selected_data = None
+
+            # Отображаем контент в зависимости от выбранного действия
+            if service_action == "Добавить":
+                st.markdown("#### ➕ Добавить новую услугу")
+                add_col1, add_col2 = st.columns(2)
+                with add_col1:
+                    new_service = st.selectbox("Услуга из прайса", srv_list, key="new_service")
+                    pay_date = st.date_input("Дата оплаты", value=date.today())
+                with add_col2:
+                    amount_raw = st.text_input("💸 Сумма ₽", placeholder="10 000")
+                    hours_raw = st.text_input("⏱️ Количество часов", placeholder="1.5")
+
+                # Кнопка добавления услуги
+                if st.button("✅ Добавить услугу в заказ", disabled=not selected_order_id and order_action == "Добавить"):
+                    if not selected_order_id and order_action == "Добавить":
+                        st.error("⚠️ Сначала создайте заказ")
+                    else:
+                        amount = parse_currency(amount_raw)
+                        try:
+                            hours = float(hours_raw.replace(",", "."))
+                        except:
+                            hours = 0.0
+
+                        run_query(
+                            "INSERT INTO order_items (order_id, service_name, payment_date, amount, hours) VALUES (?,?,?,?,?)",
+                            (selected_order_id if selected_order_id else run_query("SELECT last_insert_rowid() FROM orders", fetch=True).iloc[0][0], 
+                             new_service, pay_date.strftime("%Y-%m-%d"), amount, hours)
+                        )
+                        st.success("✅ Услуга добавлена!")
+                        st.rerun()
+
+            else:
+                # Для редактирования/удаления услуги сначала выбираем её из заказа
+                if selected_order_id:
+                    items_df = run_query(
+                        "SELECT id, service_name, payment_date, amount, hours FROM order_items WHERE order_id=?",
+                        (selected_order_id,), fetch=True
+                    )
+                    if items_df.empty:
+                        st.info("❌ В заказе нет услуг")
+                    else:
+                        item_options = [f"#{row['id']} {row['service_name']} — {format_date_display(row['payment_date'])}" for _, row in items_df.iterrows()]
+                        selected_item = st.selectbox("Выберите услугу", item_options, key="item_edit_selector")
+                        service_selected_id = int(selected_item.split()[0][1:])
+                        service_selected_data = items_df[items_df['id'] == service_selected_id].iloc[0]
+
+                        edit_item_df = pd.DataFrame([service_selected_data])
+                        edit_item_df['payment_date'] = edit_item_df['payment_date'].apply(format_date_display)
+
+                        edited_item = st.data_editor(
+                            edit_item_df,
+                            column_config={
+                                "id": st.column_config.NumberColumn("ID", disabled=True),
+                                "service_name": st.column_config.SelectboxColumn("Услуга", options=srv_list),
+                                "payment_date": st.column_config.TextColumn("Дата оплаты"),
+                                "amount": st.column_config.NumberColumn("Сумма", format="%.0f"),
+                                "hours": st.column_config.NumberColumn("Часы", format="%.1f")
+                            },
+                            hide_index=True,
+                            use_container_width=True,
+                            key="edit_service_editor",
+                            disabled=service_action == "Удалить"
+                        )
+
+                        # Кнопки действия с услугой
+                        if service_action == "Редактировать":
+                            if st.button("💾 Сохранить изменения"):
+                                row = edited_item.iloc[0]
+                                pay_date = parse_date_to_db(row["payment_date"])
+                                run_query('''
+                                    UPDATE order_items
+                                    SET service_name=?, payment_date=?, amount=?, hours=?
+                                    WHERE id=?
+                                ''', (row["service_name"], pay_date, row["amount"], row["hours"], service_selected_id))
+                                st.success("✅ Изменения сохранены!")
+                                st.rerun()
+                        elif service_action == "Удалить":
+                            if st.button("🗑️ Удалить услугу", type="primary"):
+                                run_query("DELETE FROM order_items WHERE id=?", (service_selected_id,))
+                                st.success("✅ Услуга удалена!")
+                                st.rerun()
+                else:
+                    st.info("⚠️ Сначала выберите заказ")
+
+        # 5. Кнопка основного действия с заказом
+        st.markdown("---")
+        if order_action == "Добавить":
+            if st.button("✅ Создать заказ", type="primary", disabled=not client_names):
+                c_id = client_map[selected_client]
+                run_query("INSERT INTO orders (client_id, execution_date, status) VALUES (?,?,?)",
+                          (c_id, execution_date.strftime("%Y-%m-%d"), order_status))
+                selected_order_id = run_query("SELECT last_insert_rowid() FROM orders", fetch=True).iloc[0][0]
+                st.success(f"✅ Заказ #{selected_order_id} создан!")
+                st.rerun()
+
+        elif order_action == "Редактировать" and selected_order_id:
+            if st.button("💾 Сохранить изменения заказа", type="primary"):
+                date_exec = parse_date_to_db(execution_date)
+                client_id = client_map[selected_client]
+
+                run_query('''
+                    UPDATE orders SET client_id=?, execution_date=?, status=? WHERE id=?
+                ''', (client_id, date_exec, order_status, selected_order_id))
+                st.success("✅ Заказ обновлён!")
+                st.rerun()
+
+        elif order_action == "Удалить" and selected_order_id:
+            if st.button("🗑️ Удалить заказ", type="primary"):
+                run_query("DELETE FROM orders WHERE id=?", (selected_order_id,))
+                st.success("✅ Заказ удалён!")
+                st.rerun()
+
+    # --- Правая колонка: Состав заказа ---
+    with right_col:
+        st.markdown("### 🧾 Состав заказа")
+        total_sum = 0
+
+        if selected_order_id:
+            items_df = run_query(
+                "SELECT id, service_name, payment_date, amount, hours FROM order_items WHERE order_id=?",
+                (selected_order_id,), fetch=True
+            )
+
+            if not items_df.empty:
+                detail_df = items_df.copy()
+                detail_df['payment_date'] = detail_df['payment_date'].apply(format_date_display)
+                detail_df['amount'] = detail_df['amount'].apply(lambda x: f"{format_currency(x)} ₽")
+                detail_df['hours'] = detail_df['hours'].apply(lambda x: f"{float(x):.1f}" if pd.notna(x) else "0.0")
+
+                st.dataframe(
+                    detail_df.rename(columns={
+                        "service_name": "Услуга",
+                        "payment_date": "Дата оплаты",
+                        "amount": "Сумма",
+                        "hours": "Часы"
+                    }),
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                # Подсчет итоговой суммы
+                total_sum = run_query(
+                    "SELECT SUM(amount) as total FROM order_items WHERE order_id=?",
+                    (selected_order_id,), fetch=True
+                )["total"].iloc[0] or 0
+                run_query("UPDATE orders SET total_amount=? WHERE id=?", (total_sum, selected_order_id))
+
+                # Обновление даты первого заказа клиента
+                cur_client_id = run_query("SELECT client_id FROM orders WHERE id=?", (selected_order_id,), fetch=True).iloc[0]["client_id"]
+                update_client_first_order_date(cur_client_id)
+
+                st.markdown(f"### 🧮 Итого: **{format_currency(total_sum)} ₽**")
+            else:
+                st.info("📭 В заказе пока нет услуг")
+        else:
+            st.info("📌 Выберите или создайте заказ для просмотра его состава")
 
 # --- 5. ОТЧЁТЫ ---
 elif choice == "ОТЧЁТЫ":
