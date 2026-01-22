@@ -290,10 +290,10 @@ if choice == "Клиенты и Группы":
                       }});
                       validate();
                     </script>
-                    """, height=70, key="phone_masked_input")
+                    """, height=70)
                 
                 # Получаем введённый телефон из session_state
-                c_phone_raw = st.session_state.get(phone_input_id)
+                c_phone_raw = st.session_state.get("component_value")
                 with col5:
                     c_vk_raw = st.text_input("VK ID", placeholder="id123456 или username")
                 with col6:
