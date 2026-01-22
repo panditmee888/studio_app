@@ -198,150 +198,278 @@ choice = st.sidebar.selectbox("Навигация", menu)
 if choice == "Клиенты и Группы":
     st.subheader("Клиенты")
 
-    # Получаем список групп
+    # Получаем группы
     groups_df = run_query("SELECT id, name FROM groups", fetch=True)
+    groups_list = groups_df['name'].tolist() if not groups_df.empty else []
     group_map = dict(zip(groups_df['name'], groups_df['id'])) if not groups_df.empty else {}
-    groups_list = list(group_map.keys())
 
-    # ➕ Добавление клиента
+    # Форма добавления клиента
     with st.expander("➕ Добавить нового клиента"):
         with st.form("add_client"):
-            c_name = st.text_input("Имя *", placeholder="Иванов Иван")
+            c_name = st.text_input("Имя *", placeholder="Иван Иванов")
             c_sex = st.selectbox("Пол", ["М", "Ж"])
-            c_phone = st.text_input("Телефон", placeholder="Введите номер телефона")
-            c_vk = st.text_input("VK ID", placeholder="id123456 или username")
-            c_tg = st.text_input("Telegram", placeholder="username (без @)")
-            c_group = st.selectbox("Группа", ["Без группы"] + groups_list)
-
+            
+            # Телефон — вводим в любом формате, сохраняем как есть
+            c_phone_raw = st.text_input(
+                "Телефон", 
+                placeholder="Введите номер телефона",
+                help="Введите номер в любом формате, он будет автоматически отформатирован для отображения"
+            )
+            
+            # VK ID — вводим как есть
+            c_vk_raw = st.text_input(
+                "VK ID", 
+                placeholder="id123456789 или username",
+                help="Введите ID или username, ссылка сформируется автоматически"
+            )
+            
+            # Telegram — вводим как есть
+            c_tg_raw = st.text_input(
+                "Telegram", 
+                placeholder="username (без @)",
+                help="Введите username без @, ссылка сформируется автоматически"
+            )
+            
+            # Группа
+            if groups_list:
+                c_group = st.selectbox("Группа", options=["Без группы"] + groups_list)
+            else:
+                c_group = "Без группы"
+                st.info("Группы еще не созданы")
+            
             if st.form_submit_button("Сохранить клиента"):
-                if c_name.strip():
-                    vk_clean = c_vk.strip().replace("https://vk.com/", "").replace("vk.com/", "")
-                    tg_clean = c_tg.strip().replace("@", "").replace("t.me/", "").replace("https://", "")
-                    phone = c_phone.strip()
-                    group_id = group_map.get(c_group) if c_group != "Без группы" else None
-
-                    run_query(
-                        "INSERT INTO clients (name, sex, phone, vk_id, tg_id, group_id) VALUES (?,?,?,?,?,?)",
-                        (c_name, c_sex, phone, vk_clean, tg_clean, group_id)
-                    )
-                    st.success("Клиент успешно добавлен ✅")
+                if c_name:
+                    # Сохраняем сырые данные (без форматирования)
+                    phone = c_phone_raw if c_phone_raw else ""
+                    vk = c_vk_raw if c_vk_raw else ""
+                    tg = c_tg_raw if c_tg_raw else ""
+                    g_id = group_map.get(c_group) if c_group != "Без группы" else None
+                    
+                    run_query('''INSERT INTO clients 
+                        (name, sex, phone, vk_id, tg_id, group_id) 
+                        VALUES (?,?,?,?,?,?)''', 
+                        (c_name, c_sex, phone, vk, tg, g_id))
+                    st.success("✅ Клиент добавлен!")
                     st.rerun()
                 else:
-                    st.error("Имя обязательно для заполнения")
+                    st.error("Введите имя клиента")
 
-    # 👥 Управление группами
+    # Управление группами
     with st.expander("⚙️ Группы клиентов", expanded=False):
-        col1, col2 = st.columns([3, 2])
+        col1, col2 = st.columns([2, 1])
         with col1:
             with st.form("add_group"):
-                new_group_name = st.text_input("Название новой группы")
+                new_group = st.text_input("Название группы")
                 if st.form_submit_button("Добавить группу"):
-                    if new_group_name.strip():
-                        run_query("INSERT INTO groups (name) VALUES (?)", (new_group_name.strip(),))
+                    if new_group:
+                        run_query("INSERT INTO groups (name) VALUES (?)", (new_group,))
                         st.success("Группа добавлена")
                         st.rerun()
         with col2:
-            st.write("Существующие группы:")
+            st.write("Список групп:")
             if not groups_df.empty:
                 for idx, row in groups_df.iterrows():
                     col_a, col_b, col_c = st.columns([3, 1, 1])
                     with col_a:
-                        updated_name = st.text_input("Название", value=row['name'], key=f"group_{row['id']}", label_visibility="collapsed")
+                        new_name = st.text_input(
+                            "Название", 
+                            value=row['name'], 
+                            key=f"group_name_{row['id']}",
+                            label_visibility="collapsed"
+                        )
                     with col_b:
-                        if st.button("💾", key=f"update_group_{row['id']}"):
-                            if updated_name.strip() != row['name']:
-                                run_query("UPDATE groups SET name=? WHERE id=?", (updated_name.strip(), row['id']))
-                                st.success("Обновлено")
+                        if st.button("💾", key=f"update_{row['id']}", help="Сохранить"):
+                            if new_name and new_name != row['name']:
+                                run_query("UPDATE groups SET name=? WHERE id=?", (new_name, row['id']))
+                                st.success("Группа обновлена")
                                 st.rerun()
                     with col_c:
-                        if st.button("🗑️", key=f"delete_group_{row['id']}"):
-                            linked_clients = run_query("SELECT COUNT(*) as cnt FROM clients WHERE group_id=?", (row['id'],), fetch=True)
-                            if not linked_clients.empty and linked_clients.iloc[0]['cnt'] > 0:
-                                st.warning("Нельзя удалить группу с прикреплёнными клиентами.")
+                        if st.button("🗑️", key=f"delete_{row['id']}", help="Удалить"):
+                            clients_check = run_query(
+                                "SELECT COUNT(*) as count FROM clients WHERE group_id=?", 
+                                (row['id'],), 
+                                fetch=True
+                            )
+                            if not clients_check.empty and clients_check['count'].iloc[0] > 0:
+                                st.warning("Нельзя удалить группу с клиентами!")
                             else:
                                 run_query("DELETE FROM groups WHERE id=?", (row['id'],))
-                                st.success("Удалено")
+                                st.success("Группа удалена")
                                 st.rerun()
+            else:
+                st.info("Групп пока нет")
 
-    # 🔍 Поиск и фильтрация
+    # Поиск и фильтрация
     st.markdown("### 🔍 Поиск и фильтрация")
-    col_search_1, col_search_2 = st.columns([2, 1])
-    with col_search_1:
-        search_query = st.text_input("Поиск по имени, телефону, VK или Telegram")
-    with col_search_2:
-        group_filter = st.selectbox("Фильтр по группе", ["Все"] + groups_list)
+    search_col1, search_col2 = st.columns([2, 1])
+    with search_col1:
+        search_query = st.text_input("Поиск по имени, телефону, VK или Telegram", placeholder="Введите текст...")
+    with search_col2:
+        filter_group = st.selectbox("Фильтр по группе", ["Все"] + groups_list)
 
-    # 📤 Загрузка данных клиентов
-    base_query = '''
-        SELECT c.id, c.name, c.sex, c.phone, c.vk_id, c.tg_id, g.name as group_name, c.first_order_date
-        FROM clients c
-        LEFT JOIN groups g ON c.group_id = g.id
-        WHERE 1=1
+    # Запрос клиентов
+    clients_query = '''
+    SELECT 
+        c.id, 
+        c.name, 
+        c.sex, 
+        c.phone, 
+        c.vk_id, 
+        c.tg_id, 
+        COALESCE(g.name, 'Без группы') as group_name,
+        c.first_order_date
+    FROM clients c 
+    LEFT JOIN groups g ON c.group_id = g.id
+    WHERE 1=1
     '''
-    query_params = []
+
+    params = []
 
     if search_query:
-        base_query += ''' AND (
-            LOWER(c.name) LIKE LOWER(?) OR
-            c.phone LIKE ? OR
-            LOWER(c.vk_id) LIKE LOWER(?) OR
-            LOWER(c.tg_id) LIKE LOWER(?)
-        )'''
-        like_q = f"%{search_query.strip()}%"
-        query_params += [like_q] * 4
+        clients_query += ''' AND (LOWER(c.name) LIKE LOWER(?) OR 
+                                  c.phone LIKE ? OR 
+                                  LOWER(c.vk_id) LIKE LOWER(?) OR 
+                                  LOWER(c.tg_id) LIKE LOWER(?))'''
+        search_pattern = f'%{search_query}%'
+        params.extend([search_pattern] * 4)
 
-    if group_filter != "Все":
-        base_query += ' AND g.name = ?'
-        query_params.append(group_filter)
+    if filter_group != "Все":
+        clients_query += ' AND g.name = ?'
+        params.append(filter_group)
 
-    base_query += ' ORDER BY c.id DESC'
-    df_clients = run_query(base_query, tuple(query_params), fetch=True)
+    clients_query += ' ORDER BY c.id DESC'
+    clients_df_data = run_query(clients_query, tuple(params), fetch=True)
 
-    if not df_clients.empty:
-        st.info(f"Найдено клиентов: {len(df_clients)}")
+    if not clients_df_data.empty:
+        st.info(f"Найдено клиентов: {len(clients_df_data)}")
+        
+        # Подготовка ссылок и отображаемых текстов
+        display_df = clients_df_data.copy()
 
-        df_display = df_clients.copy()
+        # Телефон
+        display_df['Телефон (текст)'] = display_df['phone'].apply(format_phone)  # +7 999 999-99-99
+        display_df['Телефон (ссылка)'] = display_df['phone'].apply(
+            lambda x: f"tel:+{''.join(filter(str.isdigit, str(x)))}" if x else ""
+        )
 
-        # --- Форматирование ссылок ---
-        def link_tel(phone_raw):
-            digits = ''.join(filter(str.isdigit, str(phone_raw)))
-            if not digits:
-                return ""
-            link = f"tel:+{digits}"
-            pretty = format_phone(phone_raw)
-            return f'<a href="{link}">{pretty}</a>'
+        # VK
+        display_df['VK (текст)'] = display_df['vk_id'].fillna("")
+        display_df['VK (ссылка)'] = display_df['vk_id'].apply(format_vk_link)
 
-        def link_vk(vk_raw):
-            if not vk_raw:
-                return ""
-            vk = str(vk_raw).strip()
-            link = f"https://vk.com/id{vk}" if vk.isdigit() else f"https://vk.com/{vk}"
-            return f'<a href="{link}" target="_blank">{vk}</a>'
+        # Telegram
+        display_df['tg_id'] = display_df['tg_id'].fillna("")
+        display_df['Telegram (текст)'] = display_df['tg_id']
+        display_df['Telegram (ссылка)'] = display_df['tg_id'].apply(lambda x: f"https://t.me/{x}" if x else "")
 
-        def link_tg(tg_raw):
-            if not tg_raw:
-                return ""
-            tg = str(tg_raw).strip()
-            return f'<a href="https://t.me/{tg}" target="_blank">{tg}</a>'
+        # Другое
+        display_df['Имя'] = display_df['name']
+        display_df['Пол'] = display_df['sex']
+        display_df['Группа'] = display_df['group_name']
+        display_df['Первая оплата'] = display_df['first_order_date'].apply(format_date_display)
 
-        df_display['Телефон'] = df_display['phone'].apply(link_tel)
-        df_display['VK'] = df_display['vk_id'].apply(link_vk)
-        df_display['Telegram'] = df_display['tg_id'].apply(link_tg)
-        df_display['Группа'] = df_display['group_name']
-        df_display['Пол'] = df_display['sex']
-        df_display['Имя'] = df_display['name']
-        df_display['Первая оплата'] = df_display['first_order_date'].apply(format_date_display)
+        # Удалим NaN из ссылок
+        display_df['Телефон (ссылка)'] = display_df['Телефон (ссылка)'].fillna("")
+        display_df['VK (ссылка)'] = display_df['VK (ссылка)'].fillna("")
+        display_df['Telegram (ссылка)'] = display_df['Telegram (ссылка)'].fillna("")
 
-        df_final = df_display[[
-            'id', 'Имя', 'Пол', 'Телефон', 'VK', 'Telegram', 'Группа', 'Первая оплата'
-        ]].rename(columns={'id': 'ID'})
-
-        # --- Отображение HTML-таблицы с активными ссылками ---
-        st.markdown("### 📋 Таблица клиентов")
-        st.markdown(df_final.to_html(escape=False, index=False), unsafe_allow_html=True)
-
+        st.data_editor(
+            display_df[[
+                'id', 'Имя', 'Пол',
+                'Телефон (ссылка)', 'VK (ссылка)', 'Telegram (ссылка)',
+                'Телефон (текст)', 'VK (текст)', 'Telegram (текст)',
+                'Группа', 'Первая оплата'
+            ]].rename(columns={
+                'id': 'ID',
+                'Телефон (ссылка)': 'Телефон',
+                'VK (ссылка)': 'VK',
+                'Telegram (ссылка)': 'Telegram',
+                'Телефон (текст)': 'Телефон (текст)',
+                'VK (текст)': 'VK (текст)',
+                'Telegram (текст)': 'Telegram (текст)',
+            }),
+            column_config={
+                "Телефон": st.column_config.LinkColumn("Телефон"),
+                "Телефон (текст)": st.column_config.TextColumn(""),
+                "VK": st.column_config.LinkColumn("VK"),
+                "VK (текст)": st.column_config.TextColumn(""),
+                "Telegram": st.column_config.LinkColumn("Telegram"),
+                "Telegram (текст)": st.column_config.TextColumn(""),
+            },
+            column_order=[
+                "ID", "Имя", "Пол",
+                "Телефон", "Телефон (текст)",
+                "VK", "VK (текст)",
+                "Telegram", "Telegram (текст)",
+                "Группа", "Первая оплата"
+            ],
+            hide_index=True,
+            use_container_width=True,
+            disabled=True,
+            key="clients_readonly_editor"
+        )
+        
+        st.markdown("---")
+        
+        # Редактирование клиентов с выбором строки
+        st.markdown("### ✏️ Редактирование клиента")
+        
+        # Создаём список для выбора
+        client_options = [f"#{row['id']} {row['name']}" for _, row in clients_df_data.iterrows()]
+        selected_client = st.selectbox("Выберите клиента для редактирования", client_options, key="client_select")
+        
+        if selected_client:
+            # Получаем ID выбранного клиента
+            selected_id = int(selected_client.split()[0][1:])
+            selected_row = clients_df_data[clients_df_data['id'] == selected_id].iloc[0]
+            
+            # Создаём таблицу с одной строкой
+            edit_df = pd.DataFrame([selected_row])
+            edit_df['first_order_date'] = edit_df['first_order_date'].apply(format_date_display)
+            
+            st.info(f"Редактирование: #{selected_id} {selected_row['name']}")
+            
+            edited_client = st.data_editor(
+                edit_df[['id', 'name', 'sex', 'phone', 'vk_id', 'tg_id', 'group_name', 'first_order_date']],
+                column_config={
+                    "id": st.column_config.NumberColumn("ID", disabled=True),
+                    "name": st.column_config.TextColumn("Имя"),
+                    "sex": st.column_config.SelectboxColumn("Пол", options=["М", "Ж"]),
+                    "phone": st.column_config.TextColumn("Телефон"),
+                    "vk_id": st.column_config.TextColumn("VK ID"),
+                    "tg_id": st.column_config.TextColumn("Telegram"),
+                    "group_name": st.column_config.SelectboxColumn("Группа", options=["Без группы"] + groups_list),
+                    "first_order_date": st.column_config.TextColumn("Первая оплата"),
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="single_client_editor"
+            )
+            
+            # Проверяем изменения
+            if not edited_client.equals(edit_df):
+                new_row = edited_client.iloc[0]
+                group_name = new_row['group_name']
+                g_id = group_map.get(group_name) if group_name != "Без группы" else None
+                first_order = parse_date_to_db(new_row['first_order_date'])
+                
+                run_query('''
+                    UPDATE clients 
+                    SET name=?, sex=?, phone=?, vk_id=?, tg_id=?, group_id=?, first_order_date=?
+                    WHERE id=?
+                ''', (
+                    new_row['name'],
+                    new_row['sex'],
+                    new_row['phone'],
+                    new_row['vk_id'],
+                    new_row['tg_id'],
+                    g_id,
+                    first_order,
+                    selected_id
+                ))
+                st.success("✅ Изменения сохранены!")
+                st.rerun()
     else:
-        st.info("Клиенты не найдены.")
+        st.info("Клиенты не найдены")
 
 # --- 2. ПРАЙС-ЛИСТ ---
 elif choice == "Прайс-лист Услуг":
