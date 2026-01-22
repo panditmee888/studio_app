@@ -355,6 +355,10 @@ if choice == "Клиенты и Группы":
         display_df['Группа'] = display_df['group_name']
         display_df['Первая оплата'] = display_df['first_order_date'].apply(format_date_display)
 
+        display_df['phone_link'] = display_df['phone_link'].fillna("")
+        display_df['vk_link'] = display_df['vk_link'].fillna("")
+        display_df['tg_link'] = display_df['tg_link'].fillna("")
+
         st.data_editor(
             display_df[[
                 'id', 'Имя', 'Пол',
@@ -367,15 +371,10 @@ if choice == "Клиенты и Группы":
                 'tg_link': 'Telegram',
             }),
             column_config={
-                "Телефон": st.column_config.LinkColumn(
-                    label="Телефон", icon="📞"
-                ),
-                "VK": st.column_config.LinkColumn(
-                    label="VK", icon="🌐"
-                ),
-                "Telegram": st.column_config.LinkColumn(
-                    label="Telegram", icon="✈️"
-                )
+                "Телефон": st.column_config.LinkColumn(),
+                "VK": st.column_config.LinkColumn(),
+                "Telegram": st.column_config.LinkColumn(),
+                # все остальные по умолчанию
             },
             hide_index=True,
             use_container_width=True,
