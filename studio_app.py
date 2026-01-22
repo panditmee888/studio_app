@@ -278,7 +278,7 @@ if choice == "Клиенты и Группы":
                 if selected_client:
                     # Получаем ID выбранного клиента
                     selected_id = int(selected_client.split()[0][1:])
-                    selected_row = clients_df_data[clients_df_data['id'] == selected_id].iloc[0]
+                    selected_row = clients_df[clients_df['id'] == selected_id].iloc[0]
             
                     # Создаём таблицу с одной строкой
                     edit_df = pd.DataFrame([selected_row])
