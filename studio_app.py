@@ -246,7 +246,7 @@ if choice == "Клиенты и Группы":
                             placeholder="Введите номер телефона",
                             mask="+7 999 999-99-99",
                             help="Введите номер в любом формате. Сохраняется как 7XXXXXXXXXX, отображается с маской."
-                        )
+                            )
                 with col5:
                     c_vk_raw = st.text_input("VK ID", placeholder="id123456 или username")
                 with col6:
